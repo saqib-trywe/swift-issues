@@ -172,6 +172,10 @@ Queue: `pending_operation` with a **partial index on `state = 'pending'`** (the 
 
 Repo initialised; the spec is committed as its first commit.
 
+### Repo layout
+
+**SwiftPM package at the repository root** — see [ADR 0002](../../docs/adr/0002-monorepo-shared-core-package.md). `Core` library plus `Server`, `CLI` and `MCP` executables, a `TestSupport` target linked only by tests, and a separate Xcode workspace for the apps.
+
 ### Build order
 
 1. **Core — `Patchable<T>` first, test-first.** Then the six entities, three leniently-decoded enums, validation.
