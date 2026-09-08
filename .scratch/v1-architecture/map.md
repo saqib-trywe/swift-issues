@@ -69,6 +69,15 @@ Resolving this surfaced a gap **backfilled into ticket 07**: throttled auth now 
 - **List tools return a compact projection, knowingly deviating** from ticket 11's raw-payload rule: agents have a hard context budget that CLI users don't.
 - **stdio transport, local process**, reusing the CLI's credential conventions; ships in the distribution but is not operator-deployed.
 
+**[13 Testing & CI strategy](issues/13-testing-ci-strategy.md) — resolved.** Added after the original twelve; it was the one gap flagged as unspecified throughout. No ADR (process, not architecture).
+
+- **TDD**, Swift Testing, per-target coverage floors (Core 90%, server 80%, CLI/MCP 70%, view models 80%, **view bodies ungated**) plus a **no-regression rule**, which does more real work than any absolute number.
+- **CI on GitHub Actions `macos-latest`** — Linux containers are unavailable to us (ADR 0010), and **macOS minutes bill at 10× on a private repo**. That cost is the concrete price of the macOS-only decision, and it is why the suite has a **time budget** (unit < 60s, full CI < 10 min).
+- **The sync engine is tested by a deterministic in-memory harness** plus **property-based convergence testing** across random operation orders. Highest-value decision in the ticket: this bug class cannot be found by hand.
+- **A contract test asserts REST and sync push produce identical state.** [ADR 0005](../../docs/adr/0005-two-write-paths-one-concurrency-model.md) rests its whole no-drift argument on shared DTOs, which is a hope until something checks it.
+- **`Patchable<T>` is written test-first, before anything depends on it** — absent-vs-null is what ADR 0005 flagged as needing to be right exactly once.
+- Testing turned up a **second, unplanned argument for variant C**: `SyncStatusView` exists once, so the five sync surfaces need five rendering tests rather than ten across two drifting implementations.
+
 **[10 Native app scope & UX](issues/10-native-app-scope-ux.md) — resolved.** No ADR — UI structure over decisions already recorded. Prototype kept at [prototype/PROTOTYPE-issue-list-detail.html](prototype/PROTOTYPE-issue-list-detail.html).
 
 - **Variant C, adaptive core**: shared components and one view model, composed differently per platform. Rejected the unified layer (an iPad app on a desktop) and the fully divergent one.
@@ -157,16 +166,24 @@ Queue: `pending_operation` with a **partial index on `state = 'pending'`** (the 
 - **Postgres** — considered and rejected in [ADR 0010](../../docs/adr/0010-macos-single-process-server.md); the deciding reason is out-of-order watermark commits under concurrent writers, not operational preference.
 - **Actor-per-service on the server** — rejected in [ADR 0009](../../docs/adr/0009-hummingbird-and-server-concurrency.md); recorded so nobody "fixes" the stateless services into actors.
 
-## Status: complete (2026-09-08)
+## Status: spec complete — implementation begun (2026-09-08)
 
-**All twelve tickets resolved.** Ten ADRs, three amended in place rather than left to disagree with later work: ADR 0005 (by ticket 08), ADR 0010 (by ticket 09), and ticket 01's domain model (by ticket 12). Ticket 04's batch-atomicity wording was corrected by ticket 08, and ticket 09's watermark change was pushed back into tickets 06 and 08.
+**Thirteen tickets resolved.** Ten ADRs, three amended in place rather than left to disagree: ADR 0005 (by ticket 08), ADR 0010 (by ticket 09), ticket 01's model (by ticket 12). Ticket 04's batch-atomicity wording was corrected by ticket 08, and ticket 09's watermark change pushed back into 06 and 08.
 
-The spec is ready to hand to an implementation effort. Entry points: [CONTEXT.md](../../CONTEXT.md) for vocabulary, [docs/adr/](../../docs/adr/) for the hard-to-reverse decisions, and each ticket's `## Resolution` for the detail.
+Repo initialised; the spec is committed as its first commit.
 
-### Open threads for whoever picks this up
+### Build order
 
-- **The CLI's Linux credential fallback** (ticket 11) is now incidental — nothing else in the system targets Linux. Worth an explicit call rather than leaving it ambiguous.
-- **Stale offline edits clobber newer work silently on the server**, by design ([ADR 0005 amendment](../../docs/adr/0005-two-write-paths-one-concurrency-model.md)). The only mitigation is the client-side advisory warning. If that proves insufficient in practice, moving detection server-side means amending ADRs 0003 and 0005 deliberately.
-- **A `LaunchAgent` server is down after an unattended reboot** until someone logs in ([ADR 0010](../../docs/adr/0010-macos-single-process-server.md)). Mitigated by OS settings, but it is the design's main operational weakness.
-- **macOS 26 / Apple silicon only**, and OS 27 ships within weeks — [ADR 0008](../../docs/adr/0008-grdb-client-storage-and-offline-queue.md) records that the storage choice was schedule-dependent and would likely have gone to SwiftData at 27.
-- Still unspecified and never ticketed: full-text search depth, attachments, push/real-time, and **testing/CI strategy across five surfaces**.
+1. **Core — `Patchable<T>` first, test-first.** Then the six entities, three leniently-decoded enums, validation.
+2. **Server** — Hummingbird, GRDB migrations, change-cursor table, auth.
+3. **CLI before the apps** — exercises the whole API contract with the least investment, so contract errors surface in a terminal rather than in SwiftUI.
+4. **Apps** — sync engine and the five conflict surfaces; the expensive part, built on a contract already proven.
+5. **MCP last** — thin over a well-proven API.
+
+### Open threads
+
+- **The CLI's Linux credential fallback** (ticket 11) is now incidental — nothing else targets Linux. Still needs an explicit call.
+- **Stale offline edits clobber newer work silently on the server**, by design ([ADR 0005 amendment](../../docs/adr/0005-two-write-paths-one-concurrency-model.md)); the client-side advisory warning is the only mitigation.
+- **A `LaunchAgent` server is down after an unattended reboot** until someone logs in ([ADR 0010](../../docs/adr/0010-macos-single-process-server.md)).
+- **macOS 26 / Apple silicon only**, with OS 27 weeks away — [ADR 0008](../../docs/adr/0008-grdb-client-storage-and-offline-queue.md) records that the storage choice was schedule-dependent.
+- Never ticketed: full-text search depth, attachments, push/real-time.
