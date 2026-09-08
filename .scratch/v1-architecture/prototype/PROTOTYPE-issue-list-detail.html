@@ -1,0 +1,313 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>PROTOTYPE — Issue list &amp; detail (ticket 10)</title>
+<style>
+  :root{
+    --bg:#f5f5f7; --panel:#fff; --ink:#1d1d1f; --dim:#6e6e73; --line:#d9d9de;
+    --sel:#e8effc; --selink:#0b57d0; --accent:#0b57d0;
+    --warn-bg:#fff4e5; --warn-ink:#8a5300; --warn-line:#f0d4a8;
+    --bad-bg:#fdecec; --bad-ink:#a11; --bad-line:#f2c4c4;
+    --info-bg:#eaf2fd; --info-ink:#0b57d0; --info-line:#c5d9f7;
+    --dirty:#b26a00;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:13px/1.45 -apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",system-ui,sans-serif;
+    padding:24px 24px 96px}
+  h1{font-size:17px;margin:0 0 4px}
+  .lede{color:var(--dim);max-width:78ch;margin:0 0 6px}
+  .lede code{background:#e9e9ee;padding:1px 4px;border-radius:3px}
+  .warnbar{background:var(--warn-bg);border:1px solid var(--warn-line);color:var(--warn-ink);
+    padding:8px 12px;border-radius:8px;margin:12px 0 20px;max-width:96ch}
+  .stage{display:flex;gap:28px;align-items:flex-start;flex-wrap:wrap}
+
+  /* device frames */
+  .mac{width:940px;background:var(--panel);border:1px solid var(--line);border-radius:10px;
+    overflow:hidden;box-shadow:0 8px 28px rgba(0,0,0,.10)}
+  .mac .titlebar{height:38px;display:flex;align-items:center;gap:8px;padding:0 12px;
+    background:linear-gradient(#fbfbfd,#f1f1f4);border-bottom:1px solid var(--line)}
+  .dot{width:11px;height:11px;border-radius:50%}
+  .r{background:#ff5f57}.y{background:#febc2e}.g{background:#28c840}
+  .titlebar .t{margin-left:6px;font-weight:600;font-size:12px;color:var(--dim)}
+  .titlebar .spacer{flex:1}
+  .tbtn{border:1px solid var(--line);background:#fff;border-radius:6px;padding:3px 9px;font-size:11px;color:var(--dim)}
+
+  .iphone{width:340px;background:#000;border-radius:38px;padding:9px;box-shadow:0 8px 28px rgba(0,0,0,.18)}
+  .iphone .screen{background:var(--panel);border-radius:30px;overflow:hidden;height:700px;display:flex;flex-direction:column}
+  .notch{height:26px;display:flex;align-items:center;justify-content:center}
+  .notch i{display:block;width:96px;height:20px;background:#000;border-radius:12px;margin-top:-9px}
+
+  .cols{display:flex;height:600px}
+  .sidebar{width:186px;border-right:1px solid var(--line);padding:8px;background:#fafafc;overflow:auto}
+  .listpane{flex:1;border-right:1px solid var(--line);overflow:auto}
+  .detail{width:340px;overflow:auto;padding:14px}
+  .wide .detail{width:420px}
+
+  .secthead{font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--dim);margin:10px 6px 4px;font-weight:600}
+  .navitem{padding:5px 8px;border-radius:6px;display:flex;gap:8px;align-items:center;cursor:default}
+  .navitem.on{background:var(--sel);color:var(--selink);font-weight:600}
+  .navitem .count{margin-left:auto;color:var(--dim);font-size:11px}
+  .navitem.alert .count{color:#a11;font-weight:700}
+
+  table{width:100%;border-collapse:collapse}
+  th{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--dim);text-align:left;
+    font-weight:600;padding:7px 10px;border-bottom:1px solid var(--line);position:sticky;top:0;background:#fafafc}
+  td{padding:7px 10px;border-bottom:1px solid #eee;vertical-align:middle}
+  tr.sel td{background:var(--sel)}
+  .key{font-variant-numeric:tabular-nums;color:var(--dim);font-size:11.5px;white-space:nowrap}
+  .key.nokey{color:#b26a00;font-style:italic}
+
+  .row{padding:10px 12px;border-bottom:1px solid #eee;display:flex;gap:10px;align-items:flex-start}
+  .row.sel{background:var(--sel)}
+  .row .body{flex:1;min-width:0}
+  .row .title{font-weight:590;margin-bottom:3px}
+  .meta{color:var(--dim);font-size:11.5px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+
+  .pill{font-size:10.5px;padding:1.5px 7px;border-radius:20px;border:1px solid var(--line);white-space:nowrap}
+  .st-todo{background:#f2f2f5;color:#555}
+  .st-prog{background:#e7f0ff;color:#0b57d0;border-color:#c5d9f7}
+  .st-done{background:#e8f6ec;color:#1b7a37;border-color:#c2e6cd}
+  .st-canc{background:#f2f2f5;color:#8a8a8f;text-decoration:line-through}
+  .lab{font-size:10.5px;padding:1.5px 7px;border-radius:4px;color:#fff}
+  .prio{font-size:11px;color:var(--dim)}
+  .prio.hi{color:#a11;font-weight:600}
+  .via{font-size:9.5px;letter-spacing:.04em;padding:1px 5px;border-radius:3px;background:#efe7fb;color:#5b2ea6;border:1px solid #ddcbf5}
+  .dirty{color:var(--dirty);font-weight:700}
+
+  .banner{padding:7px 12px;font-size:12px;display:flex;gap:8px;align-items:center;border-bottom:1px solid}
+  .b-info{background:var(--info-bg);color:var(--info-ink);border-color:var(--info-line)}
+  .b-warn{background:var(--warn-bg);color:var(--warn-ink);border-color:var(--warn-line)}
+  .b-bad{background:var(--bad-bg);color:var(--bad-ink);border-color:var(--bad-line)}
+  .banner .grow{flex:1}
+  .banner button{font:inherit;font-size:11px;border:1px solid currentColor;background:transparent;
+    color:inherit;border-radius:5px;padding:2px 8px;opacity:.85}
+
+  .field{margin-bottom:12px}
+  .flabel{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--dim);margin-bottom:3px;font-weight:600}
+  .fval{padding:5px 8px;border:1px solid var(--line);border-radius:6px;background:#fff}
+  .fval.dirtyf{border-color:var(--dirty);background:#fffaf2}
+  .fval.ro{background:#f5f5f7;color:var(--dim)}
+  .detail h2{font-size:15px;margin:2px 0 8px}
+  .desc{color:#333;white-space:pre-wrap}
+  .cmt{border-top:1px solid #eee;padding:9px 0}
+  .cmt .who{font-size:11.5px;color:var(--dim);margin-bottom:3px;display:flex;gap:6px;align-items:center}
+
+  .ios-nav{padding:10px 14px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:8px}
+  .ios-nav .back{color:var(--accent);font-size:14px}
+  .ios-nav .t{font-weight:700;font-size:15px}
+  .ios-scroll{flex:1;overflow:auto}
+  .ios-tabs{border-top:1px solid var(--line);display:flex;background:#fafafc}
+  .ios-tabs div{flex:1;text-align:center;padding:8px 0 12px;font-size:10px;color:var(--dim)}
+  .ios-tabs div.on{color:var(--accent);font-weight:600}
+  .ios-tabs .badge{display:inline-block;background:#a11;color:#fff;border-radius:9px;font-size:9px;padding:0 5px;margin-left:3px}
+
+  .caption{max-width:940px;color:var(--dim);margin:10px 0 0;font-size:12px}
+  .caption b{color:var(--ink)}
+
+  /* control bar */
+  .bar{position:fixed;left:50%;transform:translateX(-50%);bottom:16px;background:rgba(255,255,255,.96);
+    backdrop-filter:blur(12px);border:1px solid var(--line);border-radius:12px;padding:8px 12px;
+    box-shadow:0 6px 24px rgba(0,0,0,.14);display:flex;gap:14px;align-items:center;flex-wrap:wrap;max-width:94vw;z-index:9}
+  .bar .grp{display:flex;gap:5px;align-items:center}
+  .bar .lbl{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--dim);font-weight:700;margin-right:2px}
+  .bar button{font:inherit;font-size:12px;border:1px solid var(--line);background:#fff;border-radius:7px;padding:4px 10px;cursor:pointer}
+  .bar button.on{background:var(--selink);border-color:var(--selink);color:#fff;font-weight:600}
+  .bar label{font-size:11.5px;display:flex;gap:4px;align-items:center;cursor:pointer;white-space:nowrap}
+  .sep{width:1px;height:22px;background:var(--line)}
+</style>
+</head>
+<body>
+
+<h1>PROTOTYPE — Issue list &amp; detail</h1>
+<p class="lede">Throwaway mockup for <b>ticket 10</b>. Question it exists to answer: <b>how much should the UI diverge between macOS and iPhone?</b> Switch variants and toggle the sync states at the bottom.</p>
+<div class="warnbar"><b>Not code.</b> This is an HTML sketch, not SwiftUI, and nothing here compiles or runs against the API. It exists to be reacted to and then thrown away. The verdict gets folded into the ticket; this file gets kept only as a primary source.</div>
+
+<div class="stage" id="stage"></div>
+<p class="caption" id="caption"></p>
+
+<div class="bar">
+  <div class="grp"><span class="lbl">Variant</span>
+    <button data-v="A">A · Unified</button>
+    <button data-v="B">B · Divergent</button>
+    <button data-v="C">C · Adaptive core</button>
+  </div>
+  <div class="sep"></div>
+  <div class="grp"><span class="lbl">Device</span>
+    <button data-d="mac">macOS</button>
+    <button data-d="ios">iPhone</button>
+    <button data-d="both">Both</button>
+  </div>
+  <div class="sep"></div>
+  <div class="grp"><span class="lbl">States</span>
+    <label><input type="checkbox" data-s="syncing"> first sync</label>
+    <label><input type="checkbox" data-s="attention"> quarantine</label>
+    <label><input type="checkbox" data-s="superseded"> superseded-by-deletion</label>
+    <label><input type="checkbox" data-s="dirty"> dirty fields</label>
+    <label><input type="checkbox" data-s="reauth"> needs re-auth</label>
+  </div>
+</div>
+
+<script>
+const S = { v:'A', d:'both', syncing:false, attention:false, superseded:false, dirty:false, reauth:false };
+const p = new URLSearchParams(location.search);
+if (p.get('v')) S.v = p.get('v'); if (p.get('d')) S.d = p.get('d');
+['syncing','attention','superseded','dirty','reauth'].forEach(k=>{ if(p.get(k)==='1') S[k]=true; });
+
+const LAB = { bug:'#c0392b', backend:'#2d6cdf', ux:'#7d3fb5', infra:'#0e8a6b' };
+const ST = { todo:['Todo','st-todo'], inProgress:['In Progress','st-prog'], done:['Done','st-done'], cancelled:['Cancelled','st-canc'] };
+
+const ISSUES = [
+  {k:'PROJ-142', t:'Sync queue stalls behind a quarantined op', s:'inProgress', pr:'Urgent', a:'saqib', lab:['bug','backend'], due:'2026-09-11', via:'human', c:4},
+  {k:null,       t:'Draft: label picker loses colour on rename', s:'todo', pr:'Medium', a:null, lab:['ux'], due:null, via:'human', c:0, local:true},
+  {k:'PROJ-140', t:'Add partial index on pending_operation.state', s:'todo', pr:'High', a:'saqib', lab:['backend','infra'], due:'2026-09-15', via:'agent', c:1},
+  {k:'PROJ-139', t:'410 vs 404 copy in CLI', s:'done', pr:'Low', a:'jo', lab:['ux'], due:null, via:'human', c:2},
+  {k:'PROJ-137', t:'Bootstrap token unreachable under launchd', s:'inProgress', pr:'High', a:'jo', lab:['infra'], due:'2026-09-09', via:'human', c:7},
+  {k:'PROJ-131', t:'Rename Workspace → Instance everywhere', s:'cancelled', pr:'None', a:null, lab:[], due:null, via:'human', c:1},
+];
+
+const esc = s => String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+const labs = a => a.map(l=>`<span class="lab" style="background:${LAB[l]}">${l}</span>`).join(' ');
+const stPill = s => `<span class="pill ${ST[s][1]}">${ST[s][0]}</span>`;
+const keyCell = i => i.k ? `<span class="key">${i.k}</span>`
+  : `<span class="key nokey" title="Offline-created: the server assigns the Issue Key on first sync">PROJ-•</span>`;
+const viaBadge = i => i.via==='agent' ? ' <span class="via">AGENT</span>' : '';
+
+function banners(ctx){
+  let h='';
+  if (S.reauth) h+=`<div class="banner b-bad"><span>⚠︎</span><span class="grow"><b>Signed out.</b> 12 unsynced changes kept safely on this device.</span><button>Sign in</button></div>`;
+  if (S.syncing) h+=`<div class="banner b-info"><span>↻</span><span class="grow">First sync — 1,204 of ~3,900 issues. You can keep working.</span></div>`;
+  if (S.attention) h+=`<div class="banner b-warn"><span>!</span><span class="grow"><b>3 changes need attention</b> — 1 rejected, 2 waiting on it.</span><button>Review</button></div>`;
+  if (S.superseded) h+=`<div class="banner b-bad"><span>🗑</span><span class="grow"><b>PROJ-138 was deleted.</b> Your edits couldn't be applied — text kept below.</span><button>Copy my text</button></div>`;
+  return h;
+}
+
+/* ---------- macOS renderings ---------- */
+function macSidebar(){
+  return `<div class="sidebar">
+    <div class="secthead">Instance</div>
+    <div class="navitem on">📥 All Issues <span class="count">124</span></div>
+    <div class="navitem">👤 Assigned to me <span class="count">7</span></div>
+    <div class="navitem ${S.attention?'alert':''}">⚠︎ Needs attention <span class="count">${S.attention?3:0}</span></div>
+    <div class="secthead">Projects</div>
+    <div class="navitem">● Platform <span class="count">88</span></div>
+    <div class="navitem">● Design <span class="count">36</span></div>
+    <div class="secthead">Labels</div>
+    <div class="navitem">${labs(['bug'])}</div>
+    <div class="navitem">${labs(['backend'])}</div>
+  </div>`;
+}
+function macTable(){
+  const rows = ISSUES.map((i,n)=>`<tr class="${n===0?'sel':''}">
+    <td>${keyCell(i)}</td>
+    <td>${esc(i.t)}${viaBadge(i)}</td>
+    <td>${stPill(i.s)}</td>
+    <td class="prio ${i.pr==='Urgent'||i.pr==='High'?'hi':''}">${i.pr}</td>
+    <td class="meta">${i.a||'—'}</td>
+    <td>${labs(i.lab)}</td>
+    <td class="meta">${i.due||'—'}</td></tr>`).join('');
+  return `<div class="listpane"><table>
+    <thead><tr><th>Key</th><th>Title</th><th>Status</th><th>Priority</th><th>Assignee</th><th>Labels</th><th>Due</th></tr></thead>
+    <tbody>${rows}</tbody></table></div>`;
+}
+function macCards(){
+  const rows = ISSUES.map((i,n)=>`<div class="row ${n===0?'sel':''}"><div class="body">
+    <div class="title">${esc(i.t)}${viaBadge(i)}</div>
+    <div class="meta">${keyCell(i)} ${stPill(i.s)} ${labs(i.lab)} <span>${i.a||'unassigned'}</span></div>
+  </div></div>`).join('');
+  return `<div class="listpane">${rows}</div>`;
+}
+function detailPane(){
+  const d = S.dirty;
+  return `<div class="detail">
+    <div class="meta" style="margin-bottom:6px">${keyCell(ISSUES[0])} ${d?'<span class="dirty">● 2 unsynced edits</span>':''}</div>
+    <h2>${esc(ISSUES[0].t)}</h2>
+    <div class="field"><div class="flabel">Status</div><div class="fval ${d?'dirtyf':''}">In Progress ${d?'<span class="dirty">●</span>':''}</div></div>
+    <div class="field"><div class="flabel">Priority — unknown value, read-only</div><div class="fval ro">triaged &nbsp;<span style="font-size:10px">(this client can't represent it)</span></div></div>
+    <div class="field"><div class="flabel">Assignee</div><div class="fval ${d?'dirtyf':''}">saqib ${d?'<span class="dirty">●</span>':''}</div></div>
+    <div class="field"><div class="flabel">Due</div><div class="fval">11 Sep 2026</div></div>
+    <div class="field"><div class="flabel">Labels</div><div class="fval">${labs(['bug','backend'])}</div></div>
+    <div class="field"><div class="flabel">Description</div>
+      <div class="desc">A rejected op blocks its dependents but must not block the rest of the queue.</div></div>
+    <div class="flabel" style="margin-top:14px">Comments</div>
+    <div class="cmt"><div class="who">jo · 2h ago</div>Partial index on <code>state='pending'</code> should cover it.</div>
+    <div class="cmt"><div class="who">saqib <span class="via">AGENT</span> · 1h ago</div>Filed follow-up PROJ-143.</div>
+  </div>`;
+}
+function mac(){
+  const title = {A:'Issues — unified layout',B:'Issues — macOS-native, divergent',C:'Issues — adaptive core'}[S.v];
+  const list = (S.v==='B') ? macTable() : (S.v==='C' ? macTable() : macCards());
+  const wide = S.v==='B' ? ' wide' : '';
+  return `<div class="mac"><div class="titlebar">
+      <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+      <span class="t">${title}</span><span class="spacer"></span>
+      ${S.v!=='A'?'<span class="tbtn">⌘F Filter</span><span class="tbtn">⌘N New</span>':'<span class="tbtn">＋</span>'}
+    </div>
+    ${banners('mac')}
+    <div class="cols${wide}">${macSidebar()}${list}${detailPane()}</div></div>`;
+}
+
+/* ---------- iPhone renderings ---------- */
+function ios(){
+  const showDetail = (S.v==='B');
+  let inner;
+  if (!showDetail){
+    inner = `<div class="ios-nav"><span class="t">All Issues</span></div>${banners('ios')}
+      <div class="ios-scroll">${ISSUES.map(i=>`<div class="row"><div class="body">
+        <div class="title">${esc(i.t)}${viaBadge(i)}</div>
+        <div class="meta">${keyCell(i)} ${stPill(i.s)} ${labs(i.lab)}</div>
+        ${S.v==='A'?`<div class="meta">${i.a||'unassigned'} · ${i.pr} · ${i.due||'no due date'}</div>`:''}
+      </div></div>`).join('')}</div>`;
+  } else {
+    inner = `<div class="ios-nav"><span class="back">‹ Issues</span><span class="t">${ISSUES[0].k}</span></div>
+      ${banners('ios')}
+      <div class="ios-scroll" style="padding:14px">
+        <h2 style="font-size:16px;margin:0 0 10px">${esc(ISSUES[0].t)}</h2>
+        ${S.dirty?'<div class="meta"><span class="dirty">● 2 unsynced edits</span></div>':''}
+        <div class="field"><div class="flabel">Status</div><div class="fval ${S.dirty?'dirtyf':''}">In Progress</div></div>
+        <div class="field"><div class="flabel">Assignee</div><div class="fval">saqib</div></div>
+        <div class="field"><div class="flabel">Labels</div><div class="fval">${labs(['bug','backend'])}</div></div>
+        <div class="field"><div class="flabel">Description</div><div class="desc">A rejected op blocks its dependents but must not block the rest of the queue.</div></div>
+        <div class="flabel" style="margin-top:12px">Comments</div>
+        <div class="cmt"><div class="who">jo · 2h</div>Partial index should cover it.</div>
+      </div>`;
+  }
+  const badge = S.attention ? '<span class="badge">3</span>' : '';
+  return `<div class="iphone"><div class="screen">
+    <div class="notch"><i></i></div>
+    ${inner}
+    <div class="ios-tabs"><div class="on">Issues</div><div>Search</div><div>Inbox${badge}</div><div>Me</div></div>
+  </div></div>`;
+}
+
+const CAPTIONS = {
+A:`<b>A · Unified.</b> One SwiftUI layer, <code>NavigationSplitView</code> everywhere; the Mac is the phone with the panes shown. Cheapest to build and to keep consistent — and the reason to reject it is visible above: the Mac wastes a 940px window on a card list, has no columns to sort, and no keyboard affordances. You'd be shipping an iPad app on a desktop.`,
+B:`<b>B · Divergent.</b> macOS gets a dense sortable table, a wider inspector and keyboard-first chrome; iPhone gets a single column that pushes to a full-screen detail. Best on each platform, roughly two UI layers to maintain — and every sync state below has to be designed twice.`,
+C:`<b>C · Adaptive core.</b> Shared row/detail <i>components</i> and one view model, composed differently per platform: table on Mac, cards on phone. Splits the difference — one behaviour layer, two compositions. The sync states get designed once and placed twice.`
+};
+
+function render(){
+  document.querySelectorAll('.bar button[data-v]').forEach(b=>b.classList.toggle('on', b.dataset.v===S.v));
+  document.querySelectorAll('.bar button[data-d]').forEach(b=>b.classList.toggle('on', b.dataset.d===S.d));
+  document.querySelectorAll('.bar input[data-s]').forEach(c=>c.checked=S[c.dataset.s]);
+  const parts=[];
+  if (S.d==='mac'||S.d==='both') parts.push(mac());
+  if (S.d==='ios'||S.d==='both') parts.push(ios());
+  document.getElementById('stage').innerHTML = parts.join('');
+  document.getElementById('caption').innerHTML = CAPTIONS[S.v];
+  const q=new URLSearchParams({v:S.v,d:S.d});
+  ['syncing','attention','superseded','dirty','reauth'].forEach(k=>{ if(S[k]) q.set(k,'1'); });
+  history.replaceState(null,'','?'+q);
+}
+document.querySelector('.bar').addEventListener('click',e=>{
+  const b=e.target.closest('button'); if(!b) return;
+  if(b.dataset.v) S.v=b.dataset.v; if(b.dataset.d) S.d=b.dataset.d; render();
+});
+document.querySelector('.bar').addEventListener('change',e=>{
+  if(e.target.dataset.s){ S[e.target.dataset.s]=e.target.checked; render(); }
+});
+render();
+</script>
+</body>
+</html>
