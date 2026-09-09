@@ -191,3 +191,35 @@ Repo initialised; the spec is committed as its first commit.
 - **A `LaunchAgent` server is down after an unattended reboot** until someone logs in ([ADR 0010](../../docs/adr/0010-macos-single-process-server.md)).
 - **macOS 26 / Apple silicon only**, with OS 27 weeks away — [ADR 0008](../../docs/adr/0008-grdb-client-storage-and-offline-queue.md) records that the storage choice was schedule-dependent.
 - Never ticketed: full-text search depth, attachments, push/real-time.
+
+## Implementation progress (2026-09-09)
+
+Repo initialised; SwiftPM package at root (ADR 0002). **Swift 6.3.3** is the global toolchain, pinned by `.swift-version`. `make test` / `make lint` / `make format`.
+
+**Core is complete: 200 tests, 100% line coverage on the tested surface.**
+
+| Piece | Notes |
+| --- | --- |
+| `Patchable` / `Settable` | Merge Patch's three states, and a two-type split so clearing a non-nullable field is unrepresentable |
+| `Status` / `Priority` / `Role` / `Via` | Leniently decoded via `WireEnum`; unknown values preserved verbatim |
+| `CivilDate` | Calendar day; **refuses** RFC 3339 instants |
+| `ProjectKey` / `IssueKey` | ASCII-validated; Issue Key optional until first sync |
+| `ID<Entity>` / `UUIDv7` / `UUIDv5` | Phantom-typed ids; v7 for time ordering, v5 for Label id derivation |
+| Six entities + `JSONCoders` | Ticket 06 wire shape; encoder sorts keys for determinism |
+| `Validation` | Pure rules only, on the way *in*; stable failure codes; 64KB counted in **bytes** |
+| `HTTPRequest` / `HTTPResponse` / `APIError` | RFC 9457 problems; 410≠404, 401≠403, 429 carries `Retry-After` |
+| Endpoints (all resources) | Pure request values; filters, cursor pagination, `expand` |
+| `APIClient` + `FakeTransport` | One-method transport seam; token read per request |
+| Sync envelopes | Push/pull, three outcomes, `epoch:seq` watermark, all 11 operation kinds round-tripped |
+| `URLSessionTransport` | Deliberately thin; mappings are pure and tested, the network call is not |
+
+### Corrections made to the spec during implementation
+
+- **Ticket 06 amended**: comments are created with `PUT` at a caller-supplied id, not `POST`. The route table contradicted the ticket's own Writes section and ADR 0005 — an offline retry must not post twice.
+
+### Next
+
+1. **`URLSessionTransport`'s network path is intentionally untested** at unit level; it belongs to ticket 13's integration layer, which boots the real server.
+2. **The server**: Hummingbird, GRDB migrations, the change-cursor table, auth. Ticket 04 and ticket 09 govern.
+3 **CI** on GitHub Actions `macos-latest` — the coverage baseline now exists for ticket 13's no-regression rule.
+4. Still open from the spec: the CLI's Linux credential fallback is now moot (nothing targets Linux).
