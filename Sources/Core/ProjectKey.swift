@@ -20,3 +20,24 @@ public struct ProjectKey: Hashable, Sendable {
         self.wireValue = wireValue
     }
 }
+
+extension ProjectKey: Codable {
+    public init(from decoder: any Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        guard let key = ProjectKey(raw) else {
+            throw DecodingError.dataCorrupted(
+                DecodingError.Context(
+                    codingPath: decoder.codingPath,
+                    debugDescription:
+                        "Expected a project key of 2-10 characters [A-Z0-9], got \"\(raw)\"."
+                )
+            )
+        }
+        self = key
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(wireValue)
+    }
+}

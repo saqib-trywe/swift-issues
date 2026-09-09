@@ -12,11 +12,15 @@ let package = Package(
             name: "Core",
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
-        // TestSupport (entity builders, linked only by tests — ticket 13) arrives
-        // with the first domain entity; an empty target now would be scaffolding.
+        // Entity builders. Linked only by test targets, never shipped. Ticket 13.
+        .target(
+            name: "TestSupport",
+            dependencies: ["Core"],
+            swiftSettings: [.swiftLanguageMode(.v6)]
+        ),
         .testTarget(
             name: "CoreTests",
-            dependencies: ["Core"],
+            dependencies: ["Core", "TestSupport"],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
     ]
