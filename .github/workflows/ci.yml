@@ -1,0 +1,80 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Supersede in-flight runs on the same ref. macOS minutes bill at 10x on a
+# private repo (ticket 13), so a stale run is real money.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    # Linux is unavailable to us: the server is macOS-only (ADR 0010), so every
+    # job needs a Mac runner. Self-hosted runners are deliberately not used —
+    # see ticket 13.
+    runs-on: macos-latest
+    # Ticket 13's budget is under 10 minutes for the full suite. This is a
+    # backstop, not a target.
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select the newest Xcode
+        run: |
+          newest=$(ls -d /Applications/Xcode*.app | sort -V | tail -1)
+          echo "Using $newest"
+          sudo xcode-select -s "$newest"
+
+      # This project opened with `swift` silently resolving to 6.1 while the whole
+      # spec assumed 6.3.3. Swift 6.1 and 6.3 differ in strict-concurrency
+      # diagnostics, so testing on the wrong one would quietly weaken the gate
+      # ADR 0008 relies on. Fail loudly instead of hoping.
+      - name: Assert the toolchain
+        run: |
+          swift --version
+          version=$(swift --version 2>&1 | grep -oE 'Apple Swift version [0-9]+\.[0-9]+' | awk '{print $4}')
+          echo "Detected Swift $version"
+          case "$version" in
+            6.3) echo "OK" ;;
+            *)
+              echo "::error::Expected Swift 6.3.x, found $version."
+              echo "The spec targets the latest released Swift (see the map)."
+              echo "Available Xcodes:"; ls -d /Applications/Xcode*.app
+              exit 1
+              ;;
+          esac
+
+      - name: Cache SwiftPM build
+        uses: actions/cache@v4
+        with:
+          path: .build
+          key: spm-${{ runner.os }}-${{ hashFiles('Package.swift', 'Package.resolved') }}
+          restore-keys: spm-${{ runner.os }}-
+
+      - name: Build
+        run: swift build --build-tests
+
+      - name: Test
+        run: swift test --enable-code-coverage
+
+      - name: Coverage gates
+        run: python3 Scripts/check-coverage.py
+
+  lint:
+    runs-on: macos-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select the newest Xcode
+        run: sudo xcode-select -s "$(ls -d /Applications/Xcode*.app | sort -V | tail -1)"
+
+      # Formatting is a separate job so a lint failure does not hide a test
+      # failure, and vice versa.
+      - name: Lint formatting
+        run: swift-format lint --recursive --strict Sources Tests

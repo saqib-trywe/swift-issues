@@ -1,4 +1,4 @@
-.PHONY: build test lint format coverage clean
+.PHONY: build test test-core lint format coverage coverage-baseline clean
 
 build:
 	swift build
@@ -18,6 +18,12 @@ format:
 
 coverage:
 	swift test --enable-code-coverage
+	python3 Scripts/check-coverage.py
+
+# Bump the recorded baseline deliberately, after adding tests.
+coverage-baseline:
+	swift test --enable-code-coverage
+	python3 Scripts/check-coverage.py --update-baseline
 
 clean:
 	rm -rf .build
