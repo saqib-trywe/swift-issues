@@ -105,3 +105,13 @@ Both use the same REST surface. The concessions they need — Issue Key lookup a
 **The opaque watermark encodes an instance epoch: `epoch:seq`.** It was already specified as opaque, so this is a refinement of its contents rather than a change to the contract's shape — but clients must treat a **stale-epoch response as an instruction to full-resync**, so the sync endpoints need a way to say that (a distinct problem `type` on pull).
 
 Reason: `issues-server restore` rewinds the monotonic sequence, and without an epoch a client holding watermark 900 against a server restored to 400 would see `seq > 900` return empty **forever** — believing it was current while silently diverging, with no error raised anywhere.
+
+## Amendment (2026-09-09, from implementation)
+
+**Comments are created with `PUT` at a caller-supplied id, not `POST`.** The route table above lists `GET/POST /api/v1/issues/{id}/comments`, which contradicts this ticket's own Writes section and [ADR 0005](../../../docs/adr/0005-two-write-paths-one-concurrency-model.md).
+
+The reasoning that ruled out `POST /issues` applies identically to comments: an offline client retrying a create it never saw a response to must not post the same comment twice. `POST` cannot be idempotent without a separate dedupe key, which is exactly what a caller-supplied UUIDv7 already is.
+
+Concretely: the **collection** is nested (`GET /api/v1/issues/{id}/comments`), the **resource** is top-level (`GET/PUT/PATCH/DELETE /api/v1/comments/{id}`), and `issueId` travels in the create body. Same split as Issues, which list under a project filter but are addressed at `/issues/{id}`.
+
+The same applies to every other create: Project, Label and User are all `PUT` at a caller-supplied id.
