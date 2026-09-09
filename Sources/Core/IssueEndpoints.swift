@@ -51,4 +51,47 @@ public enum IssueEndpoints {
         guard !expand.isEmpty else { return [] }
         return [(name: "expand", value: expand.map(\.rawValue).joined(separator: ","))]
     }
+
+    public static func list(
+        filter: IssueFilter = IssueFilter(),
+        sort: IssueSort? = nil,
+        page: Pagination = Pagination(),
+        expand: [Expansion] = []
+    ) -> HTTPRequest {
+        var query: [(name: String, value: String)] = []
+
+        if let projectKey = filter.projectKey {
+            query.append((name: "projectKey", value: projectKey.wireValue))
+        }
+        if !filter.statuses.isEmpty {
+            query.append(
+                (name: "status", value: filter.statuses.map(\.wireValue).joined(separator: ",")))
+        }
+        if !filter.priorities.isEmpty {
+            query.append(
+                (name: "priority", value: filter.priorities.map(\.wireValue).joined(separator: ",")))
+        }
+        if let assignee = filter.assignee {
+            query.append((name: "assignee", value: assignee.wireValue))
+        }
+        if !filter.labels.isEmpty {
+            query.append((name: "label", value: filter.labels.joined(separator: ",")))
+        }
+        if let updatedSince = filter.updatedSince {
+            query.append((name: "updatedSince", value: JSONCoders.instantString(updatedSince)))
+        }
+        if let text = filter.query {
+            query.append((name: "q", value: text))
+        }
+        if let sort {
+            query.append((name: "sort", value: sort.wireValue))
+        }
+        if let cursor = page.cursor {
+            query.append((name: "cursor", value: cursor))
+        }
+        query.append((name: "limit", value: String(page.limit)))
+        query.append(contentsOf: expansionQuery(expand))
+
+        return HTTPRequest(method: "GET", path: base, query: query)
+    }
 }

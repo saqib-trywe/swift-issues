@@ -41,6 +41,12 @@ public enum JSONCoders {
         return decoder
     }()
 
+    /// Formats an instant exactly as the body encoder does, so a query
+    /// parameter and a payload never disagree about the format.
+    public static func instantString(_ date: Date) -> String {
+        rfc3339Formatter.string(from: date)
+    }
+
     private static let rfc3339Formatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
