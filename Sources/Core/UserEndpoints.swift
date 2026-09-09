@@ -1,6 +1,6 @@
 import Foundation
 
-public struct UserCreate: Encodable, Sendable {
+public struct UserCreate: Codable, Sendable {
     public var email: String
     public var displayName: String
     public var role: Role
@@ -12,7 +12,7 @@ public struct UserCreate: Encodable, Sendable {
     }
 }
 
-public struct UserPatch: Encodable, Sendable {
+public struct UserPatch: Codable, Sendable {
     public var displayName: Settable<String> = .unchanged
     public var role: Settable<Role> = .unchanged
     public var active: Settable<Bool> = .unchanged

@@ -1,6 +1,6 @@
 import Foundation
 
-public struct CommentCreate: Encodable, Sendable {
+public struct CommentCreate: Codable, Sendable {
     public var issueId: Issue.ID
     public var body: String
 
@@ -11,7 +11,7 @@ public struct CommentCreate: Encodable, Sendable {
 }
 
 /// `body` is a Comment's only mutable field, so nothing else is expressible.
-public struct CommentPatch: Encodable, Sendable {
+public struct CommentPatch: Codable, Sendable {
     public var body: Settable<String> = .unchanged
 
     public init() {}

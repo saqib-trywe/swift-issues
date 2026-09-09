@@ -1,6 +1,6 @@
 import Foundation
 
-public struct ProjectCreate: Encodable, Sendable {
+public struct ProjectCreate: Codable, Sendable {
     public var key: ProjectKey
     public var name: String
     public var description: String
@@ -14,7 +14,7 @@ public struct ProjectCreate: Encodable, Sendable {
 
 /// `key` is absent deliberately: it is immutable after creation because it is
 /// baked into every Issue Key, so changing it is not expressible.
-public struct ProjectPatch: Encodable, Sendable {
+public struct ProjectPatch: Codable, Sendable {
     public var name: Settable<String> = .unchanged
     public var description: Settable<String> = .unchanged
     public var archived: Settable<Bool> = .unchanged

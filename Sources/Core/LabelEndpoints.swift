@@ -1,6 +1,6 @@
 import Foundation
 
-public struct LabelCreate: Encodable, Sendable {
+public struct LabelCreate: Codable, Sendable {
     public var name: String
     public var color: String
 
@@ -10,7 +10,7 @@ public struct LabelCreate: Encodable, Sendable {
     }
 }
 
-public struct LabelPatch: Encodable, Sendable {
+public struct LabelPatch: Codable, Sendable {
     public var name: Settable<String> = .unchanged
     public var color: Settable<String> = .unchanged
 

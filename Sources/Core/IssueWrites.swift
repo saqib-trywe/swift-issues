@@ -5,7 +5,7 @@ import Foundation
 /// `reporterId` is absent deliberately: it is set server-side from the
 /// authenticated caller and immutable thereafter, so it is not a caller's to
 /// supply. The id lives in the path, not the body.
-public struct IssueCreate: Encodable, Sendable {
+public struct IssueCreate: Codable, Sendable {
     public var projectId: Project.ID
     public var title: String
     public var description: String
@@ -44,7 +44,7 @@ public struct IssueCreate: Encodable, Sendable {
 /// Non-nullable fields use `Settable`; nullable ones use `Patchable`, so
 /// "unassign" and "leave the assignee alone" are different values and "clear the
 /// status" cannot be expressed at all.
-public struct IssuePatch: Encodable, Sendable {
+public struct IssuePatch: Codable, Sendable {
     public var title: Settable<String> = .unchanged
     public var description: Settable<String> = .unchanged
     public var status: Settable<Status> = .unchanged
@@ -66,7 +66,7 @@ public struct IssuePatch: Encodable, Sendable {
 ///
 /// A delta rather than a replacement set, so two people concurrently adding
 /// different labels both survive. See ADR 0003.
-public struct LabelDelta: Encodable, Sendable {
+public struct LabelDelta: Codable, Sendable {
     public var add: [Label.ID]
     public var remove: [Label.ID]
 
