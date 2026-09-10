@@ -47,7 +47,15 @@ def profile_path() -> pathlib.Path:
 
 def measure() -> dict[str, tuple[int, int]]:
     """Returns target -> (covered, total) for source targets only."""
-    data = json.loads(profile_path().read_text())
+    path = profile_path()
+    if not path.exists():
+        print(
+            "No coverage profile at "
+            f"{path}.\nRun `swift test --enable-code-coverage` first — note that a "
+            "failing test run produces no profile."
+        )
+        raise SystemExit(1)
+    data = json.loads(path.read_text())
     totals: dict[str, tuple[int, int]] = {}
     for entry in data["data"][0]["files"]:
         name = entry["filename"]
