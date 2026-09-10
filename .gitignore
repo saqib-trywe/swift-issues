@@ -4,7 +4,9 @@
 # Swift / SwiftPM
 .build/
 .swiftpm/
-Package.resolved
+# Package.resolved is committed deliberately: this package ships executables
+# (server, CLI, MCP), so the dependency graph is pinned rather than floating.
+# Without it, CI and a developer machine can silently build different code.
 
 # Xcode
 DerivedData/
