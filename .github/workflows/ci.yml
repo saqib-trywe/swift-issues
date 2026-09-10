@@ -76,5 +76,10 @@ jobs:
 
       # Formatting is a separate job so a lint failure does not hide a test
       # failure, and vice versa.
+      #
+      # `swift format`, not a standalone `swift-format`: the formatter is bundled
+      # with the toolchain, so this is guaranteed present wherever the compiler is
+      # and cannot drift to a different formatter version than the one developers
+      # run locally.
       - name: Lint formatting
-        run: swift-format lint --recursive --strict Sources Tests
+        run: swift format lint --recursive --strict Sources Tests

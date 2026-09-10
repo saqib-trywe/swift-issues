@@ -10,11 +10,12 @@ test:
 test-core:
 	swift test --filter CoreTests
 
+# The toolchain-bundled formatter, so local and CI share one version.
 lint:
-	swift-format lint --recursive --strict Sources Tests
+	swift format lint --recursive --strict Sources Tests
 
 format:
-	swift-format format --in-place --recursive Sources Tests
+	swift format format --in-place --recursive Sources Tests
 
 coverage:
 	swift test --enable-code-coverage
