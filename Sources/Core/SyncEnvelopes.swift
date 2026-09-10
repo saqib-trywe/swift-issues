@@ -8,6 +8,8 @@ public enum SyncRecord: Decodable, Sendable {
     case comment(Comment)
     case label(Label)
     case issueLabel(IssueLabel)
+    case project(Project)
+    case user(User)
 
     private enum CodingKeys: String, CodingKey { case entity, record }
 
@@ -18,6 +20,8 @@ public enum SyncRecord: Decodable, Sendable {
         case .comment: self = .comment(try container.decode(Comment.self, forKey: .record))
         case .label: self = .label(try container.decode(Label.self, forKey: .record))
         case .issueLabel: self = .issueLabel(try container.decode(IssueLabel.self, forKey: .record))
+        case .project: self = .project(try container.decode(Project.self, forKey: .record))
+        case .user: self = .user(try container.decode(User.self, forKey: .record))
         }
     }
 }
@@ -81,6 +85,8 @@ public struct SyncChange: Decodable, Sendable {
                 case .label: .label(try container.decode(Label.self, forKey: .record))
                 case .issueLabel:
                     .issueLabel(try container.decode(IssueLabel.self, forKey: .record))
+                case .project: .project(try container.decode(Project.self, forKey: .record))
+                case .user: .user(try container.decode(User.self, forKey: .record))
                 }
         } else {
             record = nil

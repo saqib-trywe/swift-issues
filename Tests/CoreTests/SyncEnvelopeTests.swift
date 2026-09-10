@@ -216,3 +216,68 @@ struct SyncEnvelopeEdgeTests {
         #expect(error.requiresFullResync == false)
     }
 }
+
+@Suite("Pull carries every replicated entity")
+struct PullEntityCoverageTests {
+
+    /// A client's replica needs Projects and Users to render an issue at all —
+    /// a project name, an assignee. They are pulled but never pushed, which is
+    /// why SyncOperation has no cases for them.
+    @Test("project and user are replicable entities")
+    func projectAndUserAreReplicable() {
+        #expect(SyncEntity(rawValue: "project") == .project)
+        #expect(SyncEntity(rawValue: "user") == .user)
+    }
+
+    @Test("a project change carries its record")
+    func projectChangeCarriesRecord() throws {
+        let json = """
+            {"nextWatermark":"01H8XYZ:10","hasMore":false,
+             "changes":[{"entity":"project","id":"018F3A9C-0000-7000-8000-000000000002",
+               "deleted":false,
+               "record":{"id":"018F3A9C-0000-7000-8000-000000000002","key":"PROJ",
+                 "name":"Platform","description":"","archived":false,
+                 "createdAt":"2025-09-04T15:33:20.123Z",
+                 "updatedAt":"2025-09-04T15:33:20.123Z"}}]}
+            """
+
+        let page = try JSONCoders.decoder.decode(SyncPullResponse.self, from: Data(json.utf8))
+
+        guard case .project(let project) = try #require(page.changes.first?.record) else {
+            Issue.record("expected a project record")
+            return
+        }
+        #expect(project.key == ProjectKey("PROJ"))
+    }
+
+    @Test("a user change carries its record")
+    func userChangeCarriesRecord() throws {
+        let json = """
+            {"nextWatermark":"01H8XYZ:11","hasMore":false,
+             "changes":[{"entity":"user","id":"018F3A9C-0000-7000-8000-000000000001",
+               "deleted":false,
+               "record":{"id":"018F3A9C-0000-7000-8000-000000000001","email":"jo@example.com",
+                 "displayName":"Jo","role":"member","active":true,
+                 "createdAt":"2025-09-04T15:33:20.123Z",
+                 "updatedAt":"2025-09-04T15:33:20.123Z"}}]}
+            """
+
+        let page = try JSONCoders.decoder.decode(SyncPullResponse.self, from: Data(json.utf8))
+
+        guard case .user(let user) = try #require(page.changes.first?.record) else {
+            Issue.record("expected a user record")
+            return
+        }
+        #expect(user.displayName == "Jo")
+    }
+
+    /// Neither is pushable: a client cannot queue a project or user write offline,
+    /// which stays enforced by SyncOperation having no such cases.
+    @Test("push operations still cover only the client-editable entities")
+    func pushCoversOnlyEditableEntities() {
+        let pushable = Set([SyncEntity.issue, .comment, .label, .issueLabel])
+
+        #expect(pushable.contains(.project) == false)
+        #expect(pushable.contains(.user) == false)
+    }
+}

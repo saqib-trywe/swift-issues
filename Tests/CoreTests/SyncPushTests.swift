@@ -199,4 +199,23 @@ struct SyncOperationRoundTripTests {
         #expect(Watermark(epoch: "01H8XYZ", sequence: -1) == nil)
         #expect(Watermark(epoch: "", sequence: 1) == nil)
     }
+
+    /// Projects and Users replicate downward but are not writable through sync.
+    /// An operation for one is malformed rather than merely unsupported, so it
+    /// fails at decode instead of reaching a handler.
+    @Test(
+        "an operation for a pull-only entity is rejected",
+        arguments: ["project", "user"]
+    )
+    func pullOnlyEntitiesCannotBePushed(entity: String) {
+        let json = """
+            {"opId":"018F3A9C-0000-7000-8000-0000000000A1","entity":"\(entity)",
+             "kind":"patch","entityId":"018F3A9C-0000-7000-8000-000000000002",
+             "clientTimestamp":"2025-09-04T15:33:20.123Z","payload":{}}
+            """
+
+        #expect(throws: (any Error).self) {
+            try JSONCoders.decoder.decode(SyncOperation.self, from: Data(json.utf8))
+        }
+    }
 }

@@ -1,11 +1,19 @@
 import Foundation
 
-/// Which entity an operation targets.
+/// Which entity a sync record or operation refers to.
+///
+/// `project` and `user` are **pulled but never pushed**: a client's replica needs
+/// them to render an issue at all — a project name, an assignee — but they are
+/// admin actions performed online through REST. That asymmetry is enforced by
+/// `SyncOperation` simply having no cases for them, so a client cannot queue such
+/// a write offline.
 public enum SyncEntity: String, Codable, Hashable, Sendable {
     case issue
     case comment
     case label
     case issueLabel
+    case project
+    case user
 }
 
 /// What an operation does. Mirrors the REST verbs deliberately.
@@ -182,6 +190,16 @@ extension SyncOperation: Codable {
                     codingPath: decoder.codingPath,
                     debugDescription:
                         "A label link has no mutable fields, so issueLabel/patch is not a valid operation."
+                ))
+        case (.project, _), (.user, _):
+            // Pulled but never pushed: Projects and Users are admin actions
+            // performed online through REST, so there is no offline queue entry
+            // for them and one arriving here is malformed rather than unsupported.
+            throw DecodingError.dataCorrupted(
+                DecodingError.Context(
+                    codingPath: decoder.codingPath,
+                    debugDescription:
+                        "\(entity.rawValue) is replicated but not writable through sync; use the REST API."
                 ))
         }
     }
