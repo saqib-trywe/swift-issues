@@ -26,6 +26,11 @@ public struct AppRequestContext: RequestContext {
         self.coreContext = .init(source: source)
         self.authenticated = nil
     }
+
+    /// The shared coders, so handlers cannot drift from the wire conventions in
+    /// ticket 06 — camelCase keys, RFC 3339 instants, calendar dates for dueDate.
+    public var requestDecoder: JSONDecoder { JSONCoders.decoder }
+    public var responseEncoder: JSONEncoder { JSONCoders.encoder }
 }
 
 extension AppRequestContext {

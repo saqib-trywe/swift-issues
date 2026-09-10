@@ -95,8 +95,16 @@ public struct Pagination: Hashable, Sendable {
 }
 
 /// A page of results.
-public struct Paginated<Item: Decodable & Sendable>: Decodable, Sendable {
+///
+/// `Codable` rather than decode-only: the server produces these as well as
+/// clients consuming them.
+public struct Paginated<Item: Codable & Sendable>: Codable, Sendable {
     public let items: [Item]
     /// `nil` on the last page.
     public let nextCursor: String?
+
+    public init(items: [Item], nextCursor: String?) {
+        self.items = items
+        self.nextCursor = nextCursor
+    }
 }

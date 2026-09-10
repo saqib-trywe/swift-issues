@@ -48,6 +48,15 @@ public struct ProjectRepository: Sendable {
         }
     }
 
+    /// Every Project, oldest first. Projects are archived rather than deleted, so
+    /// archived ones are included — a caller filters if it cares.
+    public func all() throws -> [Project] {
+        try database.reader.read { db in
+            try Row.fetchAll(db, sql: "SELECT * FROM project ORDER BY created_at, id")
+                .map { try Self.project(from: $0) }
+        }
+    }
+
     static func project(from row: Row) throws -> Project {
         guard
             let uuid = UUID(uuidString: row["id"]),

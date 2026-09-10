@@ -103,4 +103,28 @@ public enum Validation {
     public static func comment(body: String) -> [ValidationFailure] {
         commentBody(body)
     }
+
+    /// Ticket 01 caps Issue titles but does not mention Project names. 200 is a
+    /// chosen limit, not a specified one — recorded so nobody mistakes it for a
+    /// requirement traceable to the spec.
+    public static let maxProjectNameCharacters = 200
+
+    public static func projectName(_ value: String) -> [ValidationFailure] {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            return [
+                ValidationFailure(
+                    field: "name", code: .required, message: "A project name is required.")
+            ]
+        }
+        if value.count > maxProjectNameCharacters {
+            return [
+                ValidationFailure(
+                    field: "name", code: .tooLong,
+                    message: "A project name may be at most \(maxProjectNameCharacters) characters."
+                )
+            ]
+        }
+        return []
+    }
 }

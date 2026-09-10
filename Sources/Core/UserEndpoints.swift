@@ -24,10 +24,16 @@ public struct UserPatch: Codable, Sendable {
 ///
 /// Exists so a lagging client can detect version skew and warn clearly rather
 /// than failing in a way nobody can diagnose. See ticket 06.
-public struct ServerMeta: Decodable, Sendable, Hashable {
+public struct ServerMeta: Codable, Sendable, Hashable {
     public let serverVersion: String
     public let apiVersions: [String]
     public let instanceName: String
+
+    public init(serverVersion: String, apiVersions: [String], instanceName: String) {
+        self.serverVersion = serverVersion
+        self.apiVersions = apiVersions
+        self.instanceName = instanceName
+    }
 }
 
 /// Requests for the User resource.

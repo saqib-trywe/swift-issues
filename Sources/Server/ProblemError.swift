@@ -10,10 +10,16 @@ public struct ProblemError: Error, HTTPResponseError {
     public let status: HTTPResponse.Status
     public let problem: Problem
 
-    public init(status: HTTPResponse.Status, type: String, title: String, detail: String? = nil) {
+    public init(
+        status: HTTPResponse.Status,
+        type: String,
+        title: String,
+        detail: String? = nil,
+        errors: [ValidationFailure]? = nil
+    ) {
         self.status = status
         self.problem = Problem(
-            type: type, title: title, status: status.code, detail: detail)
+            type: type, title: title, status: status.code, detail: detail, errors: errors)
     }
 
     public func response(from request: Request, context: some RequestContext) throws -> Response {
@@ -41,5 +47,33 @@ public struct ProblemError: Error, HTTPResponseError {
     public static func forbidden(detail: String? = nil) -> ProblemError {
         ProblemError(
             status: .forbidden, type: base + "forbidden", title: "Not permitted", detail: detail)
+    }
+
+    /// No such id. Distinct from `gone`, which means it existed and was deleted.
+    public static func notFound(detail: String? = nil) -> ProblemError {
+        ProblemError(
+            status: .notFound, type: base + "not-found", title: "Not found", detail: detail)
+    }
+
+    /// It existed and is gone. A CLI gives this its own exit code (ticket 11), so
+    /// collapsing it into `notFound` would lose a distinction users see.
+    public static func gone(detail: String? = nil) -> ProblemError {
+        ProblemError(status: .gone, type: base + "gone", title: "Gone", detail: detail)
+    }
+
+    /// A conflicting record already exists — for instance re-creating an id with
+    /// different content, which PUT treats as a conflict rather than an overwrite.
+    public static func conflict(detail: String? = nil) -> ProblemError {
+        ProblemError(
+            status: .conflict, type: base + "conflict", title: "Conflict", detail: detail)
+    }
+
+    /// Field-level validation failures, carried as the `errors` extension member
+    /// so clients branch on a stable code rather than the prose.
+    public static func invalid(_ failures: [ValidationFailure]) -> ProblemError {
+        ProblemError(
+            status: .unprocessableContent, type: base + "invalid-request",
+            title: "Invalid request", detail: "One or more fields are invalid.",
+            errors: failures)
     }
 }

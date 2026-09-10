@@ -148,3 +148,28 @@ struct ValidationFailureWireTests {
         #expect(code.rawValue == wire)
     }
 }
+
+@Suite("Validation: project name")
+struct ProjectNameValidationTests {
+
+    @Test("accepts an ordinary name")
+    func acceptsOrdinaryName() {
+        #expect(Validation.projectName("Platform").isEmpty)
+    }
+
+    @Test("rejects a blank name", arguments: ["", "   "])
+    func rejectsBlankName(raw: String) {
+        #expect(Validation.projectName(raw).map(\.code) == [.required])
+    }
+
+    @Test("rejects a name over the limit")
+    func rejectsOverLongName() {
+        let tooLong = String(repeating: "a", count: Validation.maxProjectNameCharacters + 1)
+
+        #expect(Validation.projectName(tooLong).map(\.code) == [.tooLong])
+        #expect(
+            Validation.projectName(
+                String(repeating: "a", count: Validation.maxProjectNameCharacters)
+            ).isEmpty)
+    }
+}
