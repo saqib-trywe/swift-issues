@@ -217,9 +217,26 @@ Repo initialised; SwiftPM package at root (ADR 0002). **Swift 6.3.3** is the glo
 
 - **Ticket 06 amended**: comments are created with `PUT` at a caller-supplied id, not `POST`. The route table contradicted the ticket's own Writes section and ADR 0005 — an offline retry must not post twice.
 
+### Server progress
+
+Dependencies resolved as the research predicted: **Hummingbird 2.26.0, GRDB 7.11.1, NIO 2.102.0**. `Package.resolved` is committed (this package ships executables, so the graph is pinned). `Server` is a **library** with a thin `issues-server` executable on top, so it is testable without main-symbol clashes.
+
+**Schema landed** (`AppDatabase`, migration `v1`): Core's six entities plus sessions, `change_cursor`, and a single `instance` row carrying the epoch. Two deliberate departures from Core's shapes:
+
+- The `issue` row carries a timestamp **per mutable scalar**, which Core's `Issue` deliberately lacks — per-field last-write-wins is resolved server-side. **Columns rather than ticket 01's JSON sidecar**, because the comparison is a plain SQL predicate per field where a map needs `json_extract` on every write.
+- `change_cursor` keys **one upserted row per entity** with a globally unique `seq`, so a row moves forward rather than accumulating history and two changes can never share a position.
+
+WAL mode and foreign-key enforcement are tested explicitly: WAL serialising writers is why ADR 0010 chose SQLite, and foreign keys are how ticket 08's strict rejection of unknown references is enforced.
+
 ### Next
 
-1. **`URLSessionTransport`'s network path is intentionally untested** at unit level; it belongs to ticket 13's integration layer, which boots the real server.
-2. **The server**: Hummingbird, GRDB migrations, the change-cursor table, auth. Ticket 04 and ticket 09 govern.
-3 **CI** on GitHub Actions `macos-latest` — the coverage baseline now exists for ticket 13's no-regression rule.
-4. Still open from the spec: the CLI's Linux credential fallback is now moot (nothing targets Linux).
+1. **The change-cursor invariant** — writing an entity and bumping the cursor in **one transaction**, with a test proving the cursor does *not* advance when the write throws. ADR 0008 calls this the most expensive thing to get wrong, because failure is silent divergence found days later.
+2. **Auth** — token hashing, session lookup, middleware (401 vs 403 vs revoked).
+3. **REST handlers** per resource, then **sync push/pull** last.
+4. `ServerEntryPoint` is a `fatalError` stub; the HTTP application arrives with the routing slice.
+
+### Known loose ends
+
+- `actions/checkout@v4` targets Node 20, which GitHub has deprecated and is force-running on Node 24. A `@v5` bump fixes it; harmless until the shim is dropped.
+- `origin` uses **HTTPS**, not SSH — SSH key auth failed for the `saqib-trywe` account.
+- The CLI's Linux credential fallback (ticket 11) is moot now that nothing targets Linux.
