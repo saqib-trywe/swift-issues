@@ -333,3 +333,111 @@ struct SyncPushAuthorityTests {
         #expect(outcomes == [.rejected, .rejected, .rejected])
     }
 }
+
+@Suite("Sync push: comment supersession and label rename")
+struct SyncPushCommentSupersessionTests {
+
+    private func push(
+        _ database: AppDatabase, _ token: String, _ operations: [SyncOperation]
+    ) async throws -> [SyncResult] {
+        let batch = SyncPush(deviceId: "mac-1", operations: operations)
+        let data: Data = try JSONCoders.encoder.encode(batch)
+        let headers: HTTPFields = [
+            .authorization: "Bearer \(token)", .contentType: "application/json",
+        ]
+
+        let application = Application(router: IssuesRouter.build(database: database))
+        return try await application.test(.router) { client -> [SyncResult] in
+            try await client.execute(
+                uri: "/api/v1/sync/push", method: .post, headers: headers,
+                body: ByteBuffer(data: data)
+            ) { raw -> [SyncResult] in
+                #expect(raw.status == .ok)
+                let body = try JSONCoders.decoder.decode(
+                    SyncPushResponse.self, from: Data(buffer: raw.body))
+                return body.results
+            }
+        }
+    }
+
+    /// The Comment equivalent of the tombstoned-Issue case. Deletion is terminal for
+    /// comments too, and the winning record has to come back so a client can tell the
+    /// user their edit could not be applied and hand the text back.
+    @Test("an edit to a deleted comment is superseded, carrying the tombstone")
+    func editToDeletedCommentIsSuperseded() async throws {
+        let database = try AppDatabase.inMemory()
+        let user = User.fixture(role: .member)
+        try UserRepository(database: database).save(user)
+        let project = Project.fixture(key: ProjectKey("PROJ")!)
+        try ProjectRepository(database: database).save(project)
+        let issue = try IssueRepository(database: database).create(
+            Issue.fixture(key: nil, projectId: project.id, reporterId: user.id))
+        let comments = CommentRepository(database: database)
+        let comment = Comment.fixture(issueId: issue.id, authorId: user.id, body: "Doomed")
+        try comments.save(comment)
+        try comments.delete(comment.id, at: Date())
+        let token = try SessionRepository(database: database).create(
+            for: user.id, kind: .human, deviceId: "mac-1")
+
+        var patch = CommentPatch()
+        patch.body = .set("Too late")
+        let results = try await push(
+            database, token.raw,
+            [.patchComment(opId: UUID(), id: comment.id, at: Date(), body: patch)])
+
+        let result = try #require(results.first)
+        #expect(result.outcome == .superseded)
+        guard case .comment(let winner) = try #require(result.current) else {
+            Testing.Issue.record("expected a comment record")
+            return
+        }
+        #expect(winner.isDeleted)
+        // The text is gone, because deleting a comment clears it.
+        #expect(winner.body == nil)
+    }
+
+    @Test("renaming a label through sync applies")
+    func renamingLabelThroughSyncApplies() async throws {
+        let database = try AppDatabase.inMemory()
+        let user = User.fixture(role: .member)
+        try UserRepository(database: database).save(user)
+        let project = Project.fixture(key: ProjectKey("PROJ")!)
+        try ProjectRepository(database: database).save(project)
+        let label = try LabelRepository(database: database).save(
+            Label.fixture(projectId: project.id, name: "backend"))
+        let token = try SessionRepository(database: database).create(
+            for: user.id, kind: .human, deviceId: "mac-1")
+
+        var patch = LabelPatch()
+        patch.name = .set("back-end")
+        let results = try await push(
+            database, token.raw,
+            [.patchLabel(opId: UUID(), id: label.id, at: Date(), body: patch)])
+
+        #expect(results.first?.outcome == .applied)
+        // The id deliberately does not follow the name: derivation is a
+        // creation-time device only.
+        #expect(try LabelRepository(database: database).find(label.id)?.name == "back-end")
+    }
+
+    @Test("a blank label name is rejected through sync")
+    func blankLabelNameRejectedThroughSync() async throws {
+        let database = try AppDatabase.inMemory()
+        let user = User.fixture(role: .member)
+        try UserRepository(database: database).save(user)
+        let project = Project.fixture(key: ProjectKey("PROJ")!)
+        try ProjectRepository(database: database).save(project)
+        let label = try LabelRepository(database: database).save(
+            Label.fixture(projectId: project.id, name: "backend"))
+        let token = try SessionRepository(database: database).create(
+            for: user.id, kind: .human, deviceId: "mac-1")
+
+        var patch = LabelPatch()
+        patch.name = .set("   ")
+        let results = try await push(
+            database, token.raw,
+            [.patchLabel(opId: UUID(), id: label.id, at: Date(), body: patch)])
+
+        #expect(results.first?.outcome == .rejected)
+    }
+}

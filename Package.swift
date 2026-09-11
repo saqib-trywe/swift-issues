@@ -14,6 +14,11 @@ let package = Package(
         .package(url: "https://github.com/hummingbird-project/hummingbird.git", from: "2.26.0"),
         // ADR 0010: embedded SQLite, one library across client and server.
         .package(url: "https://github.com/groue/GRDB.swift.git", from: "7.11.1"),
+        // Already in the graph transitively via Hummingbird; declared explicitly so
+        // `_CryptoExtras` (scrypt) can be imported. See ADR 0006's amendment.
+        .package(url: "https://github.com/apple/swift-crypto.git", from: "4.5.2"),
+        // Already transitive via Hummingbird; declared so the reaper can be a Service.
+        .package(url: "https://github.com/swift-server/swift-service-lifecycle.git", from: "2.6.0"),
     ],
     targets: [
         .target(
@@ -27,6 +32,8 @@ let package = Package(
                 "Core",
                 .product(name: "Hummingbird", package: "hummingbird"),
                 .product(name: "GRDB", package: "GRDB.swift"),
+                .product(name: "_CryptoExtras", package: "swift-crypto"),
+                .product(name: "ServiceLifecycle", package: "swift-service-lifecycle"),
             ],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),

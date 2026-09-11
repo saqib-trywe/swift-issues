@@ -16,6 +16,14 @@ public enum IssuesRouter {
 
         router.get("/health") { _, _ in "ok" }
 
+        // Login sits outside the authenticated group: it is how a token is
+        // obtained in the first place.
+        // Cheap hashing parameters in tests would be unsafe in production, so the
+        // production hasher is the default and tests inject their own.
+        let auth = LoginRoutes(database: database, hasher: PasswordHasher.production)
+        auth.register(on: router.group("/api/v1"))
+        auth.registerBootstrap(on: router.group("/api/v1"))
+
         let api = router.group("/api/v1")
         api.add(middleware: AuthenticationMiddleware(sessions: SessionRepository(database: database)))
 

@@ -126,6 +126,22 @@ public struct SessionRepository: Sendable {
         }
     }
 
+    /// Removes sessions that have passed their idle expiry, returning how many went.
+    ///
+    /// Housekeeping, not enforcement: `authenticate` checks expiry on every request,
+    /// so a session that expires between sweeps is still refused. Reaping only stops
+    /// the table growing forever. Ticket 04 puts this under ServiceLifecycle rather
+    /// than cron or an external scheduler.
+    @discardableResult
+    public func reapExpired(before now: Date) throws -> Int {
+        try database.writer.write { db in
+            try db.execute(
+                sql: "DELETE FROM session WHERE expires_at IS NOT NULL AND expires_at <= ?",
+                arguments: [now])
+            return db.changesCount
+        }
+    }
+
     /// Immediate, which is the whole reason ADR 0006 chose opaque server-side
     /// tokens over JWTs.
     public func revoke(_ raw: String) throws {

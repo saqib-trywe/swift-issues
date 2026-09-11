@@ -200,6 +200,27 @@ public struct AppDatabase: Sendable {
             }
         }
 
+        migrator.registerMigration("v3-login-throttle") { db in
+            // Counted per **account**, not per IP: per-IP is trivially evaded and
+            // punishes everyone behind one NAT. Ticket 07's narrow exception to the
+            // no-rate-limiting rule, because an unauthenticated attacker guessing
+            // passwords is not an identifiable team member.
+            try db.create(table: "login_attempt") { t in
+                t.primaryKey("email", .text)
+                t.column("failures", .integer).notNull().defaults(to: 0)
+                t.column("locked_until", .datetime)
+            }
+        }
+
+        migrator.registerMigration("v4-bootstrap-token") { db in
+            // Only a hash is stored, as with session tokens: the raw value exists
+            // once, on stdout and in a 0600 file the admin deletes by using it.
+            try db.alter(table: "instance") { t in
+                t.add(column: "bootstrap_token_hash", .text)
+                t.add(column: "bootstrap_expires_at", .datetime)
+            }
+        }
+
         return migrator
     }
 }

@@ -9,15 +9,19 @@ import Hummingbird
 public struct ProblemError: Error, HTTPResponseError {
     public let status: HTTPResponse.Status
     public let problem: Problem
+    /// Seconds, when the status carries one. Ticket 12 requires agents to honour it.
+    public let retryAfter: Int?
 
     public init(
         status: HTTPResponse.Status,
         type: String,
         title: String,
         detail: String? = nil,
-        errors: [ValidationFailure]? = nil
+        errors: [ValidationFailure]? = nil,
+        retryAfter: Int? = nil
     ) {
         self.status = status
+        self.retryAfter = retryAfter
         self.problem = Problem(
             type: type, title: title, status: status.code, detail: detail, errors: errors)
     }
@@ -25,6 +29,9 @@ public struct ProblemError: Error, HTTPResponseError {
     public func response(from request: Request, context: some RequestContext) throws -> Response {
         var headers: HTTPFields = [:]
         headers[.contentType] = "application/problem+json"
+        if let retryAfter {
+            headers[.retryAfter] = String(retryAfter)
+        }
         return Response(
             status: status,
             headers: headers,

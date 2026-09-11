@@ -23,6 +23,7 @@ public enum ValidationCode: String, Hashable, Sendable, Codable {
     case required
     case tooLong
     case tooLarge
+    case tooShort
 }
 
 /// Pure, structural validation of values on their way *in*.
@@ -148,5 +149,20 @@ public enum Validation {
             ]
         }
         return []
+    }
+
+    /// ADR 0006: minimum 12 characters, and deliberately **no composition rules and
+    /// no rotation**, per current NIST guidance. Requiring a digit and a symbol
+    /// pushes people toward "Password1!", which is shorter and more guessable than a
+    /// long passphrase.
+    public static let minimumPasswordCharacters = 12
+
+    public static func password(_ value: String) -> [ValidationFailure] {
+        guard value.count < minimumPasswordCharacters else { return [] }
+        return [
+            ValidationFailure(
+                field: "password", code: .tooShort,
+                message: "A password must be at least \(minimumPasswordCharacters) characters.")
+        ]
     }
 }

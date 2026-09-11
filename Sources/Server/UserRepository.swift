@@ -46,6 +46,31 @@ public struct UserRepository: Sendable {
         }
     }
 
+    /// Stores an already-hashed password. The repository never sees a plaintext
+    /// one, so there is nowhere for it to be logged or accidentally persisted.
+    public func setPassword(_ encodedHash: String, for id: User.ID) throws {
+        try database.writer.write { db in
+            try db.execute(
+                sql: "UPDATE user SET password_hash = ? WHERE id = ?",
+                arguments: [encodedHash, id.rawValue.uuidString])
+        }
+    }
+
+    /// Looks a user up for authentication, returning their stored hash alongside.
+    ///
+    /// Returns `nil` for an unknown address *and* for one with no password set, so
+    /// the caller cannot accidentally distinguish the two.
+    func credentials(forEmail email: String) throws -> (user: User, passwordHash: String)? {
+        try database.reader.read { db in
+            guard
+                let row = try Row.fetchOne(
+                    db, sql: "SELECT * FROM user WHERE email = ?", arguments: [email]),
+                let hash: String = row["password_hash"]
+            else { return nil }
+            return (try Self.user(from: row), hash)
+        }
+    }
+
     static func user(from row: Row) throws -> User {
         guard let uuid = UUID(uuidString: row["id"]) else {
             throw DatabaseError(message: "Malformed user row: \(row)")

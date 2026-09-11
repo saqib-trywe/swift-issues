@@ -16,3 +16,15 @@ Authentication is **local email + password** with **opaque 256-bit tokens stored
 - **Auth failure never quarantines an operation.** A 401 mid-sync preserves the pending queue intact and moves sync into a "needs re-authentication" state. Quarantine (ADR 0004) means *this write is bad*; these writes are fine and it is the session that is not, so conflating them would ask users to repair dozens of perfectly good writes.
 - **Per-account login throttling is a deliberate exception** to the no-rate-limiting decision in [ADR 0005](0005-two-write-paths-one-concurrency-model.md) and ticket 06. That decision rested on every caller being an identifiable team member, which is precisely what an unauthenticated attacker is not. Recorded so the inconsistency reads as intentional.
 - **No web UI exists in v1**, so personal access tokens are minted from the macOS app, with `issues auth token create` as the bootstrap path — the one place a password crosses the CLI, since a user with no token cannot call an authenticated API to make one.
+
+## Amendment (2026-09-11, from implementation)
+
+**Passwords are hashed with scrypt, not Argon2id.** CryptoKit ships no Argon2, so the choice was between a third-party Argon2 package and a memory-hard KDF from a source already in the dependency graph.
+
+scrypt comes from `swift-crypto`'s `_CryptoExtras`, which is Apple-maintained, BoringSSL-backed, and already resolved transitively through Hummingbird — so this adds no new dependency. It is **memory-hard**, which is the property Argon2id was chosen for; the alternative would have put an unaudited third-party crypto library directly in the authentication path, trusted with every password in the system. That is a larger risk than the marginal difference between scrypt and Argon2id.
+
+Parameters are OWASP's floor for scrypt — N = 2^17, r = 8, p = 1, roughly 128MB per derivation — which is affordable because logins are rare and throttled. A test asserts those parameters rather than merely commenting them, so a later "optimisation" that lowered them fails.
+
+Stored hashes are PHC-shaped (`scrypt$N$r$p$salt$hash`) and **carry their own parameters**, so the cost can be raised later without invalidating every stored password. Not recording them would mean a forced reset for everybody the first time the cost needed increasing.
+
+Two caveats recorded deliberately: `_CryptoExtras` is underscore-prefixed, meaning Apple reserves the right to change it, and a malformed stored hash **throws** rather than returning "wrong password" — a corrupt hash is an operational problem, and reporting it as a bad password would send someone to reset a password that was never the issue.
