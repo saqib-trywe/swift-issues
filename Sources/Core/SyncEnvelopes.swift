@@ -3,7 +3,7 @@ import Foundation
 /// A record of any syncable entity, discriminated by `entity`.
 ///
 /// Shared by push results and pull changes so both speak the same shape.
-public enum SyncRecord: Decodable, Sendable {
+public enum SyncRecord: Codable, Sendable {
     case issue(Issue)
     case comment(Comment)
     case label(Label)
@@ -24,6 +24,32 @@ public enum SyncRecord: Decodable, Sendable {
         case .user: self = .user(try container.decode(User.self, forKey: .record))
         }
     }
+
+    /// The server produces these as well as clients consuming them, so the
+    /// discriminator is written back out alongside the record.
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        switch self {
+        case .issue(let value):
+            try container.encode(SyncEntity.issue, forKey: .entity)
+            try container.encode(value, forKey: .record)
+        case .comment(let value):
+            try container.encode(SyncEntity.comment, forKey: .entity)
+            try container.encode(value, forKey: .record)
+        case .label(let value):
+            try container.encode(SyncEntity.label, forKey: .entity)
+            try container.encode(value, forKey: .record)
+        case .issueLabel(let value):
+            try container.encode(SyncEntity.issueLabel, forKey: .entity)
+            try container.encode(value, forKey: .record)
+        case .project(let value):
+            try container.encode(SyncEntity.project, forKey: .entity)
+            try container.encode(value, forKey: .record)
+        case .user(let value):
+            try container.encode(SyncEntity.user, forKey: .entity)
+            try container.encode(value, forKey: .record)
+        }
+    }
 }
 
 /// What became of one pushed operation.
@@ -31,7 +57,7 @@ public enum SyncRecord: Decodable, Sendable {
 /// Three outcomes, not two. Without `superseded` there is nowhere to express "your
 /// write was valid but the entity is gone", and it would be reported as a success
 /// while the user's text vanished. See ADR 0005.
-public enum SyncOutcome: String, Decodable, Hashable, Sendable {
+public enum SyncOutcome: String, Codable, Hashable, Sendable {
     case applied
     /// Quarantined: retrying this payload cannot succeed without user repair.
     case rejected
@@ -39,7 +65,7 @@ public enum SyncOutcome: String, Decodable, Hashable, Sendable {
     case superseded
 }
 
-public struct SyncResult: Decodable, Sendable {
+public struct SyncResult: Codable, Sendable {
     public let opId: UUID
     public let outcome: SyncOutcome
     /// The authoritative timestamp, present when the operation applied.
@@ -49,13 +75,32 @@ public struct SyncResult: Decodable, Sendable {
     /// Present when superseded, so the client can show what won and hand the
     /// user's losing text back.
     public let current: SyncRecord?
+
+    public init(
+        opId: UUID,
+        outcome: SyncOutcome,
+        serverTimestamp: Date?,
+        problem: Problem?,
+        current: SyncRecord?
+    ) {
+        self.opId = opId
+        self.outcome = outcome
+        self.serverTimestamp = serverTimestamp
+        self.problem = problem
+        self.current = current
+    }
 }
 
-public struct SyncPushResponse: Decodable, Sendable {
+public struct SyncPushResponse: Codable, Sendable {
     /// The server's position after this batch, so the client can pull from
     /// exactly here.
     public let watermark: Watermark
     public let results: [SyncResult]
+
+    public init(watermark: Watermark, results: [SyncResult]) {
+        self.watermark = watermark
+        self.results = results
+    }
 }
 
 /// One entry in the change stream.

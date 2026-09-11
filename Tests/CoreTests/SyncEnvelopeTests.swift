@@ -1,5 +1,6 @@
 import Core
 import Foundation
+import TestSupport
 import Testing
 
 @Suite("Sync push results")
@@ -279,5 +280,41 @@ struct PullEntityCoverageTests {
 
         #expect(pushable.contains(.project) == false)
         #expect(pushable.contains(.user) == false)
+    }
+}
+
+@Suite("SyncRecord round trips")
+struct SyncRecordRoundTripTests {
+
+    /// Every case, because a record kind that cannot survive the wire is an entity
+    /// that can never reach a client — and it would fail silently, mid-stream.
+    @Test("every record kind round trips with its discriminator")
+    func everyRecordKindRoundTrips() throws {
+        let projectId = Project.ID()
+        let records: [SyncRecord] = [
+            .issue(Core.Issue.fixture()),
+            .comment(Core.Comment.fixture()),
+            .label(Label.fixture(projectId: projectId)),
+            .issueLabel(IssueLabel.fixture()),
+            .project(Project.fixture()),
+            .user(User.fixture()),
+        ]
+
+        for record in records {
+            let once: Data = try JSONCoders.encoder.encode(record)
+            let decoded: SyncRecord = try JSONCoders.decoder.decode(SyncRecord.self, from: once)
+            let twice: Data = try JSONCoders.encoder.encode(decoded)
+            #expect(once == twice)
+        }
+    }
+
+    @Test("the discriminator names the entity")
+    func discriminatorNamesTheEntity() throws {
+        let data: Data = try JSONCoders.encoder.encode(SyncRecord.project(Project.fixture()))
+        let object = try #require(
+            JSONSerialization.jsonObject(with: data) as? [String: Any])
+
+        #expect(object["entity"] as? String == "project")
+        #expect(object["record"] is [String: Any])
     }
 }

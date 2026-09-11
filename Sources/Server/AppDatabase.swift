@@ -186,6 +186,20 @@ public struct AppDatabase: Sendable {
                 arguments: [UUIDv7.generate().uuidString, Date()])
         }
 
+        migrator.registerMigration("v2-applied-operations") { db in
+            // Retained indefinitely, matching tombstones (ADR 0003). A bounded
+            // window looks tidier but fails exactly where it matters: a client's
+            // queue survives session expiry, so it can legitimately return after
+            // any offline period and replay operations older than any window,
+            // producing silent duplicates. Cost is a UUID and a row per operation
+            // ever performed.
+            try db.create(table: "applied_operation") { t in
+                t.primaryKey("op_id", .text)
+                t.column("outcome", .text).notNull()
+                t.column("applied_at", .datetime).notNull()
+            }
+        }
+
         return migrator
     }
 }
