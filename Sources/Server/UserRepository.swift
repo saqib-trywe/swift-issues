@@ -42,18 +42,22 @@ public struct UserRepository: Sendable {
                     db, sql: "SELECT * FROM user WHERE id = ?",
                     arguments: [id.rawValue.uuidString])
             else { return nil }
-            // No malformed-id guard here, unlike ProjectRepository: this looks a
-            // row up *by* id, so any row it retrieves has an id equal to the valid
-            // UUID string we queried with. A guard could never fire.
-            return User(
-                id: id,
-                email: row["email"],
-                displayName: row["display_name"],
-                role: Role(wireValue: row["role"]),
-                active: row["active"],
-                createdAt: row["created_at"],
-                updatedAt: row["updated_at"]
-            )
+            return try Self.user(from: row)
         }
+    }
+
+    static func user(from row: Row) throws -> User {
+        guard let uuid = UUID(uuidString: row["id"]) else {
+            throw DatabaseError(message: "Malformed user row: \(row)")
+        }
+        return User(
+            id: User.ID(uuid),
+            email: row["email"],
+            displayName: row["display_name"],
+            role: Role(wireValue: row["role"]),
+            active: row["active"],
+            createdAt: row["created_at"],
+            updatedAt: row["updated_at"]
+        )
     }
 }

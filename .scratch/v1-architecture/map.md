@@ -228,15 +228,37 @@ Dependencies resolved as the research predicted: **Hummingbird 2.26.0, GRDB 7.11
 
 WAL mode and foreign-key enforcement are tested explicitly: WAL serialising writers is why ADR 0010 chose SQLite, and foreign keys are how ticket 08's strict rejection of unknown references is enforced.
 
+### Server: v1 HTTP surface complete
+
+**397 tests. Core 99.14%, Server 98.35%**, both gated by `Scripts/check-coverage.py` (per-target floors plus a no-regression baseline).
+
+| Piece | Notes |
+| --- | --- |
+| `AppDatabase` | SQLite via GRDB, WAL and foreign keys on in **both** on-disk and in-memory, so tests cannot create states production rejects |
+| `ChangeCursor` | One upserted row per entity with a globally unique `seq`. Write-and-record is one transaction, with a test proving the cursor rolls back when the write throws |
+| Sessions | Opaque 256-bit tokens stored as SHA-256. Not a KDF: a token has nothing to guess, so Argon2id would add latency per request and buy nothing. Argon2id arrives with login |
+| Auth middleware | 401 ≠ 403 throughout. ADR 0007's agent profile enforced at the boundary: an Admin's agent is still not an admin |
+| Project / Issue / Comment / Label | Full CRUD. Reporter, author and `via` come from the token, never the body |
+| Filtering | OR-within / AND-across against real SQL. Keyset cursors, with a test inserting a row mid-scan and asserting no skip or duplicate |
+| Sync push | **One transaction per operation.** `[good, bad, good]` → `[applied, rejected, applied]`. All eleven operation kinds tested |
+| Sync pull | One unified stream, tombstones without records, `epoch:seq` watermark, stale-epoch → 409 |
+
+### Corrections made to the spec during implementation
+
+- **Ticket 06 amended**: comments are created with `PUT` at a caller-supplied id, not `POST` — the route table contradicted the ticket's own Writes section and ADR 0005.
+- **Core's `SyncEntity`/`SyncRecord` extended** with `project` and `user`: pull is a unified stream and a client's replica needs both to render an Issue at all. Neither is pushable, which `SyncOperation` still enforces.
+
+### Notes for whoever picks this up
+
+- **`String + String` chains are a build hazard.** A test file assembling JSON by concatenation took the test target from 6.5 seconds to over nine minutes. Use interpolation or `JSONSerialization`.
+- **Path parameter names must match across route groups at the same depth.** `/projects/:id` in one file and `/projects/:projectId/labels` in another hung the suite at runtime.
+- **Types written decode-only for the client keep needing `Encodable`** — `ServerMeta`, `Paginated`, `SyncRecord`, `SyncResult`, `SyncPushResponse`, `SyncChange`, `SyncPullResponse`. Default API/sync types to `Codable`.
+- Five malformed-row guards are uncovered by design: each defends against a corrupted database row whose non-lookup UUID columns are invalid, which foreign keys make unreachable in a test.
+
 ### Next
 
-1. **The change-cursor invariant** — writing an entity and bumping the cursor in **one transaction**, with a test proving the cursor does *not* advance when the write throws. ADR 0008 calls this the most expensive thing to get wrong, because failure is silent divergence found days later.
-2. **Auth** — token hashing, session lookup, middleware (401 vs 403 vs revoked).
-3. **REST handlers** per resource, then **sync push/pull** last.
-4. `ServerEntryPoint` is a `fatalError` stub; the HTTP application arrives with the routing slice.
-
-### Known loose ends
-
-- `actions/checkout@v4` targets Node 20, which GitHub has deprecated and is force-running on Node 24. A `@v5` bump fixes it; harmless until the shim is dropped.
-- `origin` uses **HTTPS**, not SSH — SSH key auth failed for the `saqib-trywe` account.
-- The CLI's Linux credential fallback (ticket 11) is moot now that nothing targets Linux.
+1. **Login and password hashing.** Needs a dependency decision: CryptoKit has no Argon2id, which ADR 0006 specifies.
+2. **First-run bootstrap** — the one-time token on stdout, plus env-var seeding (ticket 07/09).
+3. **Config loading** — TOML plus `ISSUES_*` overrides (ticket 09).
+4. **Background work** — expired-session reaping under ServiceLifecycle (ticket 04).
+5. Then the **CLI**, which exercises the whole contract from a terminal, before the apps.

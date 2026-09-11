@@ -20,7 +20,29 @@ struct SyncRoutes: Sendable {
             let service = SyncService(database: database, identity: context.identity)
             return try EditedResponse(status: .ok, response: try service.apply(batch))
         }
+
+        group.get("/sync/pull") { request, context in
+            _ = context.identity
+            let query = request.uri.queryParameters
+
+            var since: Watermark?
+            if let raw = query["since"[...]] {
+                guard let parsed = Watermark(String(raw)) else {
+                    throw ProblemError.invalid([
+                        ValidationFailure(
+                            field: "since", code: .required,
+                            message: "Expected a watermark of the form epoch:sequence.")
+                    ])
+                }
+                since = parsed
+            }
+
+            let limit: Int = query["limit"[...]].flatMap { Int($0) } ?? SyncPullService.defaultLimit
+            let service = SyncPullService(database: database)
+            return try EditedResponse(status: .ok, response: try service.page(since: since, limit: limit))
+        }
     }
 }
 
 extension SyncPushResponse: ResponseEncodable {}
+extension SyncPullResponse: ResponseEncodable {}

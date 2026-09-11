@@ -104,7 +104,7 @@ public struct SyncPushResponse: Codable, Sendable {
 }
 
 /// One entry in the change stream.
-public struct SyncChange: Decodable, Sendable {
+public struct SyncChange: Codable, Sendable {
     public let entity: SyncEntity
     public let id: UUID
     /// Tombstones are first-class entries — the only way a delete propagates.
@@ -113,6 +113,13 @@ public struct SyncChange: Decodable, Sendable {
     public let record: SyncRecord?
 
     private enum CodingKeys: String, CodingKey { case entity, id, deleted, record }
+
+    public init(entity: SyncEntity, id: UUID, deleted: Bool, record: SyncRecord?) {
+        self.entity = entity
+        self.id = id
+        self.deleted = deleted
+        self.record = record
+    }
 
     public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
@@ -137,12 +144,36 @@ public struct SyncChange: Decodable, Sendable {
             record = nil
         }
     }
+
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(entity, forKey: .entity)
+        try container.encode(id, forKey: .id)
+        try container.encode(deleted, forKey: .deleted)
+        // The nested record carries no discriminator of its own: the entry's
+        // `entity` already names it, so it is written bare.
+        switch record {
+        case .issue(let value): try container.encode(value, forKey: .record)
+        case .comment(let value): try container.encode(value, forKey: .record)
+        case .label(let value): try container.encode(value, forKey: .record)
+        case .issueLabel(let value): try container.encode(value, forKey: .record)
+        case .project(let value): try container.encode(value, forKey: .record)
+        case .user(let value): try container.encode(value, forKey: .record)
+        case nil: break
+        }
+    }
 }
 
-public struct SyncPullResponse: Decodable, Sendable {
+public struct SyncPullResponse: Codable, Sendable {
     public let changes: [SyncChange]
     public let nextWatermark: Watermark
     public let hasMore: Bool
+
+    public init(changes: [SyncChange], nextWatermark: Watermark, hasMore: Bool) {
+        self.changes = changes
+        self.nextWatermark = nextWatermark
+        self.hasMore = hasMore
+    }
 }
 
 extension Problem {
