@@ -23,8 +23,16 @@ public struct AppDatabase: Sendable {
 
     /// For tests and for `--dry-run` style checks. In-memory so the whole
     /// persistence layer is testable at unit speed (ticket 13's 60-second budget).
+    ///
+    /// Foreign keys are enforced here too. Without that, tests could create states
+    /// production rejects — a dangling reference, say — and would quietly stop
+    /// testing the constraint that ticket 08 relies on.
     public static func inMemory() throws -> AppDatabase {
-        try AppDatabase(DatabaseQueue())
+        var configuration = Configuration()
+        configuration.prepareDatabase { db in
+            try db.execute(sql: "PRAGMA foreign_keys = ON")
+        }
+        return try AppDatabase(DatabaseQueue(configuration: configuration))
     }
 
     /// Opens the on-disk database in WAL mode.
