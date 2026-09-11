@@ -456,3 +456,218 @@ struct IssueRoutesTests {
         }
     }
 }
+
+@Suite("Issue list query parameters")
+struct IssueListQueryTests {
+
+    private func harness(
+        _ body:
+            @Sendable @escaping (any TestClientProtocol, String, AppDatabase, Project, User)
+            async throws -> Void
+    ) async throws {
+        let database = try AppDatabase.inMemory()
+        let me = User.fixture(email: "me@example.com")
+        try UserRepository(database: database).save(me)
+        let project = Project.fixture(key: ProjectKey("PROJ")!)
+        try ProjectRepository(database: database).save(project)
+        let token = try SessionRepository(database: database).create(
+            for: me.id, kind: .human, deviceId: nil)
+
+        try await Application(router: IssuesRouter.build(database: database)).test(.router) {
+            client in
+            try await body(client, token.raw, database, project, me)
+        }
+    }
+
+    private func page(_ response: TestResponse) throws -> Paginated<Issue> {
+        try JSONCoders.decoder.decode(Paginated<Issue>.self, from: Data(buffer: response.body))
+    }
+
+    @Test("status accepts a comma-separated list")
+    func statusAcceptsCommaList() async throws {
+        try await harness { client, token, database, project, me in
+            let issues = IssueRepository(database: database)
+            for (title, status) in [("A", Status.todo), ("B", .inProgress), ("C", .done)] {
+                _ = try issues.create(
+                    Issue.fixture(
+                        key: nil, projectId: project.id, title: title, status: status,
+                        reporterId: me.id))
+            }
+
+            try await client.execute(
+                uri: "/api/v1/issues?status=todo,inProgress", method: .get,
+                headers: [.authorization: "Bearer \(token)"]
+            ) { response in
+                let items = try page(response).items
+                #expect(Set(items.map(\.title)) == ["A", "B"])
+            }
+        }
+    }
+
+    /// `me` must resolve to the caller. Resolving it in the route rather than the
+    /// repository keeps persistence unaware of who is asking.
+    @Test("assignee=me resolves to the authenticated caller")
+    func assigneeMeResolvesToCaller() async throws {
+        try await harness { client, token, database, project, me in
+            let issues = IssueRepository(database: database)
+            let other = User.fixture(email: "other@example.com")
+            try UserRepository(database: database).save(other)
+            _ = try issues.create(
+                Issue.fixture(
+                    key: nil, projectId: project.id, title: "Mine", reporterId: me.id,
+                    assigneeId: me.id))
+            _ = try issues.create(
+                Issue.fixture(
+                    key: nil, projectId: project.id, title: "Theirs", reporterId: me.id,
+                    assigneeId: other.id))
+
+            try await client.execute(
+                uri: "/api/v1/issues?assignee=me", method: .get,
+                headers: [.authorization: "Bearer \(token)"]
+            ) { response in
+                let items = try page(response).items
+                #expect(items.map(\.title) == ["Mine"])
+            }
+        }
+    }
+
+    @Test("free text search is exposed as q")
+    func freeTextIsExposedAsQ() async throws {
+        try await harness { client, token, database, project, me in
+            let issues = IssueRepository(database: database)
+            _ = try issues.create(
+                Issue.fixture(
+                    key: nil, projectId: project.id, title: "Partial index", reporterId: me.id))
+            _ = try issues.create(
+                Issue.fixture(
+                    key: nil, projectId: project.id, title: "Unrelated", reporterId: me.id))
+
+            try await client.execute(
+                uri: "/api/v1/issues?q=partial", method: .get,
+                headers: [.authorization: "Bearer \(token)"]
+            ) { response in
+                let items = try page(response).items
+                #expect(items.map(\.title) == ["Partial index"])
+            }
+        }
+    }
+
+    /// Cursors are opaque to the caller and survive the round trip through a URL.
+    @Test("a returned cursor can be handed straight back")
+    func cursorRoundTripsThroughTheURL() async throws {
+        try await harness { client, token, database, project, me in
+            let issues = IssueRepository(database: database)
+            for index in 1...3 {
+                var draft = Issue.fixture(
+                    key: nil, projectId: project.id, title: "Issue \(index)", reporterId: me.id)
+                draft.updatedAt = Date(timeIntervalSince1970: TimeInterval(index * 1_000))
+                _ = try issues.create(draft)
+            }
+
+            var cursor: String?
+            try await client.execute(
+                uri: "/api/v1/issues?limit=2&sort=-updatedAt", method: .get,
+                headers: [.authorization: "Bearer \(token)"]
+            ) { response in
+                let first = try page(response)
+                #expect(first.items.map(\.title) == ["Issue 3", "Issue 2"])
+                cursor = try #require(first.nextCursor)
+            }
+
+            let encoded =
+                try #require(cursor)
+                .addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? ""
+            try await client.execute(
+                uri: "/api/v1/issues?limit=2&sort=-updatedAt&cursor=\(encoded)", method: .get,
+                headers: [.authorization: "Bearer \(token)"]
+            ) { response in
+                let items = try page(response).items
+                #expect(items.map(\.title) == ["Issue 1"])
+            }
+        }
+    }
+
+    /// Clamped rather than rejected: asking for more than the server allows should
+    /// give the maximum, not a failed round trip.
+    @Test("an absurd limit is clamped rather than refused")
+    func absurdLimitIsClamped() async throws {
+        try await harness { client, token, _, _, _ in
+            try await client.execute(
+                uri: "/api/v1/issues?limit=99999", method: .get,
+                headers: [.authorization: "Bearer \(token)"]
+            ) { response in
+                #expect(response.status == .ok)
+            }
+        }
+    }
+
+    /// An unparseable filter value must not silently widen the result set into
+    /// "everything" — an unknown status matches nothing, which is the safe reading.
+    @Test("an unrecognised status matches nothing rather than everything")
+    func unrecognisedStatusMatchesNothing() async throws {
+        try await harness { client, token, database, project, me in
+            _ = try IssueRepository(database: database).create(
+                Issue.fixture(key: nil, projectId: project.id, title: "A", reporterId: me.id))
+
+            try await client.execute(
+                uri: "/api/v1/issues?status=nonsense", method: .get,
+                headers: [.authorization: "Bearer \(token)"]
+            ) { response in
+                let items = try page(response).items
+                #expect(items.isEmpty)
+            }
+        }
+    }
+
+    @Test("assignee accepts a specific user id as well as the tokens")
+    func assigneeAcceptsAUserID() async throws {
+        try await harness { client, token, database, project, me in
+            let other = User.fixture(email: "other@example.com")
+            try UserRepository(database: database).save(other)
+            let issues = IssueRepository(database: database)
+            _ = try issues.create(
+                Issue.fixture(
+                    key: nil, projectId: project.id, title: "Theirs", reporterId: me.id,
+                    assigneeId: other.id))
+            _ = try issues.create(
+                Issue.fixture(
+                    key: nil, projectId: project.id, title: "Mine", reporterId: me.id,
+                    assigneeId: me.id))
+
+            try await client.execute(
+                uri: "/api/v1/issues?assignee=\(other.id.rawValue.uuidString)", method: .get,
+                headers: [.authorization: "Bearer \(token)"]
+            ) { response in
+                let items = try page(response).items
+                #expect(items.map(\.title) == ["Theirs"])
+            }
+        }
+    }
+
+    /// The query parameter is parsed with the same formatter as request bodies, so
+    /// a filter and a payload cannot disagree about the format.
+    @Test("updatedSince accepts an RFC 3339 instant")
+    func updatedSinceAcceptsRFC3339() async throws {
+        try await harness { client, token, database, project, me in
+            let issues = IssueRepository(database: database)
+            var old = Issue.fixture(
+                key: nil, projectId: project.id, title: "Old", reporterId: me.id)
+            old.updatedAt = Date(timeIntervalSince1970: 1_700_000_000)
+            _ = try issues.create(old)
+            var recent = Issue.fixture(
+                key: nil, projectId: project.id, title: "Recent", reporterId: me.id)
+            recent.updatedAt = Date(timeIntervalSince1970: 1_757_000_000)
+            _ = try issues.create(recent)
+
+            let since = JSONCoders.instantString(Date(timeIntervalSince1970: 1_750_000_000))
+            let encoded = since.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? ""
+            try await client.execute(
+                uri: "/api/v1/issues?updatedSince=\(encoded)", method: .get,
+                headers: [.authorization: "Bearer \(token)"]
+            ) { response in
+                let items = try page(response).items
+                #expect(items.map(\.title) == ["Recent"])
+            }
+        }
+    }
+}

@@ -9,10 +9,16 @@ struct IssueRoutes: Sendable {
     var repository: IssueRepository { IssueRepository(database: database) }
 
     func register(on group: RouterGroup<AppRequestContext>) {
-        group.get("/issues") { _, context in
-            _ = context.identity
+        group.get("/issues") { request, context in
+            let query = request.uri.queryParameters
             return try EditedResponse(
-                status: .ok, response: Paginated(items: try repository.recent(), nextCursor: nil))
+                status: .ok,
+                response: try repository.list(
+                    filter: IssueFilter(query: query),
+                    sort: IssueSort(wireValue: query["sort"[...]].map(String.init)),
+                    page: Pagination(query: query),
+                    resolvingMeAs: context.identity.userId
+                ))
         }
 
         // Accepts a UUID or an Issue Key: humans and agents hold keys, not UUIDs,
@@ -113,9 +119,10 @@ struct IssueRoutes: Sendable {
     /// tombstone and 404 for something that never existed. Keys are never reused,
     /// so a deleted issue's key still resolves — to the 410.
     private func resolve(_ context: AppRequestContext) throws -> Issue {
-        guard let raw = context.parameters.get("reference") else {
-            throw ProblemError.notFound(detail: "No such issue.")
-        }
+        // The router guarantees the parameter when the pattern matched, so an
+        // empty fallback simply fails the parse below rather than needing a branch
+        // no test could reach.
+        let raw = context.parameters.get("reference") ?? ""
 
         let found: Issue? =
             if let uuid = UUID(uuidString: raw) {

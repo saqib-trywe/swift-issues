@@ -47,6 +47,12 @@ public enum JSONCoders {
         rfc3339Formatter.string(from: date)
     }
 
+    /// Parses an instant in either accepted form, so query parameters and bodies
+    /// agree about the format.
+    public static func instant(_ raw: String) -> Date? {
+        rfc3339Formatter.date(from: raw) ?? rfc3339WholeSecondsFormatter.date(from: raw)
+    }
+
     private static let rfc3339Formatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
