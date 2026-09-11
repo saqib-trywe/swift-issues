@@ -173,3 +173,28 @@ struct ProjectNameValidationTests {
             ).isEmpty)
     }
 }
+
+@Suite("Validation: label name")
+struct LabelNameValidationTests {
+
+    @Test("accepts an ordinary label name")
+    func acceptsOrdinaryName() {
+        #expect(Validation.labelName("backend").isEmpty)
+    }
+
+    @Test("rejects a blank name", arguments: ["", "  "])
+    func rejectsBlankName(raw: String) {
+        #expect(Validation.labelName(raw).map(\.code) == [.required])
+    }
+
+    /// A label is read as a chip in a list, so the cap is about legibility rather
+    /// than storage. Another chosen limit, not one traceable to the spec.
+    @Test("rejects a name over the limit")
+    func rejectsOverLongName() {
+        let atLimit = String(repeating: "a", count: Validation.maxLabelNameCharacters)
+        let overLimit = String(repeating: "a", count: Validation.maxLabelNameCharacters + 1)
+
+        #expect(Validation.labelName(atLimit).isEmpty)
+        #expect(Validation.labelName(overLimit).map(\.code) == [.tooLong])
+    }
+}

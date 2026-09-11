@@ -127,4 +127,26 @@ public enum Validation {
         }
         return []
     }
+
+    /// Another chosen limit rather than a specified one: ticket 01 does not cap
+    /// Label names. 60 keeps a label readable as a chip in a list.
+    public static let maxLabelNameCharacters = 60
+
+    public static func labelName(_ value: String) -> [ValidationFailure] {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            return [
+                ValidationFailure(
+                    field: "name", code: .required, message: "A label name is required.")
+            ]
+        }
+        if value.count > maxLabelNameCharacters {
+            return [
+                ValidationFailure(
+                    field: "name", code: .tooLong,
+                    message: "A label name may be at most \(maxLabelNameCharacters) characters.")
+            ]
+        }
+        return []
+    }
 }

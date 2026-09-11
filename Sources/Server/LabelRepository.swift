@@ -69,6 +69,59 @@ public struct LabelRepository: Sendable {
         }
     }
 
+    public func find(_ id: Label.ID) throws -> Label? {
+        try database.reader.read { db in
+            guard
+                let row = try Row.fetchOne(
+                    db, sql: "SELECT * FROM label WHERE id = ?",
+                    arguments: [id.rawValue.uuidString])
+            else { return nil }
+            return try Self.label(from: row)
+        }
+    }
+
+    /// Live labels in a Project, oldest first. Tombstoned ones are excluded.
+    public func all(in projectId: Project.ID) throws -> [Label] {
+        try database.reader.read { db in
+            try Row.fetchAll(
+                db,
+                sql: """
+                    SELECT * FROM label
+                    WHERE project_id = ? AND deleted_at IS NULL
+                    ORDER BY created_at, id
+                    """,
+                arguments: [projectId.rawValue.uuidString]
+            ).map { try Self.label(from: $0) }
+        }
+    }
+
+    static func label(from row: Row) throws -> Label {
+        guard let uuid = UUID(uuidString: row["id"]),
+            let projectUUID = UUID(uuidString: row["project_id"])
+        else {
+            throw DatabaseError(message: "Malformed label row: \(row)")
+        }
+        return Label(
+            id: Label.ID(uuid),
+            projectId: Project.ID(projectUUID),
+            name: row["name"],
+            color: row["color"],
+            createdAt: row["created_at"],
+            updatedAt: row["updated_at"],
+            deletedAt: row["deleted_at"]
+        )
+    }
+
+    /// Tombstones the Label. Removing a label never deletes the row.
+    public func delete(_ id: Label.ID, at now: Date) throws {
+        try database.writer.write { db in
+            try db.execute(
+                sql: "UPDATE label SET deleted_at = ?, updated_at = ? WHERE id = ?",
+                arguments: [now, now, id.rawValue.uuidString])
+            try ChangeCursor.record(db, entity: .label, id: id.rawValue.uuidString)
+        }
+    }
+
     /// Live label ids on an Issue, tombstoned links excluded.
     public func labelIds(for issueId: Issue.ID) throws -> [Label.ID] {
         try database.reader.read { db in

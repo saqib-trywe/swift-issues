@@ -32,6 +32,7 @@ public enum IssuesRouter {
         ProjectRoutes(database: database).register(on: api)
         IssueRoutes(database: database).register(on: api)
         CommentRoutes(database: database).register(on: api)
+        LabelRoutes(database: database).register(on: api)
 
         return router
     }
