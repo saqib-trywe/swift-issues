@@ -155,6 +155,24 @@ public struct IssueRepository: Sendable {
         }
     }
 
+    /// Most recently changed first. Filtering and cursor pagination are the next
+    /// slice; this is the unfiltered listing.
+    public func recent(limit: Int = 50) throws -> [Issue] {
+        try database.reader.read { db in
+            try Row.fetchAll(
+                db,
+                sql: """
+                    SELECT i.*, p.key AS project_key FROM issue i
+                    JOIN project p ON p.id = i.project_id
+                    WHERE i.deleted_at IS NULL
+                    ORDER BY i.updated_at DESC, i.id
+                    LIMIT ?
+                    """,
+                arguments: [limit]
+            ).map { try Self.issue(from: $0) }
+        }
+    }
+
     /// The per-field receipt timestamps, keyed by column. Sync machinery rather
     /// than domain state, which is why it is not on Core's `Issue`.
     public func fieldTimestamps(_ id: Issue.ID) throws -> [String: Date] {
