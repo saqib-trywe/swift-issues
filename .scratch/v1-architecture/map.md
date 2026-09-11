@@ -288,6 +288,7 @@ The decision that shaped everything else: **CLI tests run in-process against the
 - **Types written decode-only for the client keep needing `Encodable`** — `ServerMeta`, `Paginated`, `SyncRecord`, `SyncResult`, `SyncPushResponse`, `SyncChange`, `SyncPullResponse`. Default API/sync types to `Codable`.
 - **`ExitCode` collides with ArgumentParser's own type**; the CLI's is `ExitStatus`. `CommandError` is not public, so a parse failure is identified by ArgumentParser's own `exitCode(for:)` classification.
 - **A leading `-` cannot start an option's value**: `--sort -updated` parses as a flag. `--reverse` exists because of it; `--sort=-updated` also works.
+- **`FileManager.homeDirectoryForCurrentUser` ignores `$HOME`** — it reads the password database. A smoke test run with `HOME=/tmp/...` wrote to the real home. The CLI resolves `$HOME` first; anything else touching a home directory should too.
 - **The coverage gate keeps finding missing *positive* paths**, never missing negative ones. This session: no test that an Admin could promote anyone, none for `--project`, `--priority` or `--server`. Write the allow case beside the deny case, every time.
 
 ### Next

@@ -14,7 +14,7 @@ public enum IssuesCLI {
     /// The production entry point.
     public static func run() async -> Int32 {
         let environment = ProcessInfo.processInfo.environment
-        let home = FileManager.default.homeDirectoryForCurrentUser
+        let home = CLIConfiguration.home(environment: environment)
         let context = CommandContext(
             terminal: .standard(),
             environment: environment,

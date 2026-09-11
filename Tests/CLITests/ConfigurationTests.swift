@@ -282,3 +282,41 @@ struct CredentialStoreTests {
         }
     }
 }
+
+@Suite("Home directory resolution")
+struct HomeResolutionTests {
+
+    /// `FileManager.homeDirectoryForCurrentUser` reads the password database and
+    /// ignores `$HOME`, so without this a sandboxed run writes to the real home.
+    /// Found by a smoke test that did exactly that.
+    @Test("HOME is honoured when set")
+    func homeIsHonouredWhenSet() {
+        let resolved = CLIConfiguration.home(environment: ["HOME": "/tmp/sandbox"])
+        #expect(resolved.path == "/tmp/sandbox")
+
+        let file = CLIConfiguration.defaultFile(
+            environment: ["HOME": "/tmp/sandbox"], home: resolved)
+        #expect(file.path == "/tmp/sandbox/.config/issues/config.toml")
+    }
+
+    @Test(
+        "an unset or empty HOME falls back to the account's home",
+        arguments: [
+            [String: String](),
+            ["HOME": ""],
+        ])
+    func unsetHomeFallsBack(_ environment: [String: String]) {
+        #expect(
+            CLIConfiguration.home(environment: environment)
+                == FileManager.default.homeDirectoryForCurrentUser)
+    }
+
+    /// XDG wins over HOME, since someone who set it was being specific.
+    @Test("XDG_CONFIG_HOME still wins")
+    func xdgStillWins() {
+        let environment = ["HOME": "/tmp/sandbox", "XDG_CONFIG_HOME": "/tmp/xdg"]
+        let file = CLIConfiguration.defaultFile(
+            environment: environment, home: CLIConfiguration.home(environment: environment))
+        #expect(file.path == "/tmp/xdg/issues/config.toml")
+    }
+}

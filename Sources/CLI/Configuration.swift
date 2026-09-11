@@ -18,6 +18,19 @@ struct CLIConfiguration: Sendable, Equatable {
         return base.appending(path: "issues").appending(path: "config.toml")
     }
 
+    /// The home directory, preferring `$HOME`.
+    ///
+    /// `FileManager.homeDirectoryForCurrentUser` reads the password database and
+    /// ignores `$HOME` entirely, so `HOME=/tmp/sandbox issues config set ...`
+    /// silently writes to the real home instead. Every other Unix tool honours
+    /// the variable, and anyone sandboxing a run expects it to be honoured here.
+    static func home(environment: [String: String]) -> URL {
+        if let home = environment["HOME"], !home.isEmpty {
+            return URL(fileURLWithPath: home)
+        }
+        return FileManager.default.homeDirectoryForCurrentUser
+    }
+
     /// The per-directory override file. Named without a leading path so the walk
     /// below can look for it in each ancestor.
     static let projectFileName = ".issues.toml"
