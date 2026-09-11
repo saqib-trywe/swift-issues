@@ -144,6 +144,21 @@ public struct SessionRepository: Sendable {
 
     /// Immediate, which is the whole reason ADR 0006 chose opaque server-side
     /// tokens over JWTs.
+    /// Ends every session a user holds.
+    ///
+    /// Deactivation has to do this. Without it, "deactivate" would mean nothing
+    /// until the user's existing tokens idled out — up to sixty days of continued
+    /// access for somebody who has just been removed.
+    @discardableResult
+    public func revokeAll(for userId: User.ID) throws -> Int {
+        try database.writer.write { db in
+            try db.execute(
+                sql: "DELETE FROM session WHERE user_id = ?",
+                arguments: [userId.rawValue.uuidString])
+            return db.changesCount
+        }
+    }
+
     public func revoke(_ raw: String) throws {
         try database.writer.write { db in
             try db.execute(

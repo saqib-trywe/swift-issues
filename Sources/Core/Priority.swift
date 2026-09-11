@@ -62,3 +62,8 @@ extension Priority {
         }
     }
 }
+
+extension Priority {
+    /// The values this build recognises, in the order a person thinks of them.
+    public static let known: [Priority] = [.none, .low, .medium, .high, .urgent]
+}

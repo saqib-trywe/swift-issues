@@ -56,3 +56,11 @@ extension Status {
         }
     }
 }
+
+extension Status {
+    /// The values this build recognises.
+    ///
+    /// Exists so a CLI can list them in an error message. Deliberately excludes
+    /// `.unknown`, which has no fixed value to name.
+    public static let known: [Status] = [.todo, .inProgress, .done, .cancelled]
+}

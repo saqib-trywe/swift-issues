@@ -35,6 +35,32 @@ public struct UserRepository: Sendable {
         }
     }
 
+    /// Every user, ordered by display name.
+    ///
+    /// Unpaginated: an instance this is for has tens of users, not thousands, and
+    /// a cursor here would be machinery with nothing to do. It is still returned
+    /// inside a `Paginated` so the shape can gain paging later without becoming a
+    /// breaking change.
+    public func all() throws -> [User] {
+        try database.reader.read { db in
+            try Row.fetchAll(db, sql: "SELECT * FROM user ORDER BY display_name COLLATE NOCASE, id")
+                .map(Self.user(from:))
+        }
+    }
+
+    /// Used to keep email addresses unique, which login depends on: two accounts
+    /// sharing an address would make one of them permanently unreachable.
+    public func find(email: String) throws -> User? {
+        try database.reader.read { db in
+            guard
+                let row = try Row.fetchOne(
+                    db, sql: "SELECT * FROM user WHERE email = ? COLLATE NOCASE",
+                    arguments: [email])
+            else { return nil }
+            return try Self.user(from: row)
+        }
+    }
+
     public func find(_ id: User.ID) throws -> User? {
         try database.reader.read { db in
             guard

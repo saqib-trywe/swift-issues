@@ -29,6 +29,16 @@ public struct APIClient: Sendable {
         try await perform(request).discardingValue()
     }
 
+    /// Sends a request and returns the body as it arrived, still classifying
+    /// failures. The CLI's `--json` needs this: decoding and re-encoding would
+    /// silently drop any field this build does not know about, which is exactly
+    /// what a script reaching for a new server field is trying to read.
+    public func data(for request: HTTPRequest) async throws -> Data {
+        let response = try await perform(request)
+        try response.discardingValue()
+        return response.body
+    }
+
     private func perform(_ request: HTTPRequest) async throws -> HTTPResponse {
         var request = request
         request.headers["Accept"] = "application/json"

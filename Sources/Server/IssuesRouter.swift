@@ -37,6 +37,7 @@ public enum IssuesRouter {
                 ))
         }
 
+        UserRoutes(database: database).register(on: api)
         ProjectRoutes(database: database).register(on: api)
         IssueRoutes(database: database).register(on: api)
         CommentRoutes(database: database).register(on: api)

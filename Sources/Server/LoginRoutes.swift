@@ -3,19 +3,10 @@ import Foundation
 import GRDB
 import Hummingbird
 
-/// What a successful login returns.
-///
-/// The token exists exactly once, here. It is stored only as a hash, so it cannot
-/// be recovered later — losing it means logging in again.
-public struct LoginResponse: Codable, Sendable, ResponseEncodable {
-    public let token: String
-    public let user: User
-}
-
-struct LoginRequest: Codable, Sendable {
-    let email: String
-    let password: String
-}
+// `LoginRequest` and `LoginResponse` live in Core so the server and every client
+// encode the same shape. Hummingbird needs the response to be encodable as a
+// response body, which Core cannot know about.
+extension LoginResponse: ResponseEncodable {}
 
 /// Login, and the throttle that protects it.
 struct LoginRoutes: Sendable {

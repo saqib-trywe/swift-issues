@@ -7,6 +7,7 @@ let package = Package(
     products: [
         .library(name: "Core", targets: ["Core"]),
         .executable(name: "issues-server", targets: ["issues-server"]),
+        .executable(name: "issues", targets: ["issues-cli"]),
     ],
     dependencies: [
         // ADR 0009: the only candidate both stable and structured-concurrency
@@ -19,6 +20,8 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-crypto.git", from: "4.5.2"),
         // Already transitive via Hummingbird; declared so the reaper can be a Service.
         .package(url: "https://github.com/swift-server/swift-service-lifecycle.git", from: "2.6.0"),
+        // Ticket 11 names it for the CLI's command grammar.
+        .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.8.2"),
     ],
     targets: [
         .target(
@@ -42,6 +45,20 @@ let package = Package(
             dependencies: ["Server"],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
+        // A library for the same reason `Server` is one: `main` cannot be tested.
+        .target(
+            name: "CLI",
+            dependencies: [
+                "Core",
+                .product(name: "ArgumentParser", package: "swift-argument-parser"),
+            ],
+            swiftSettings: [.swiftLanguageMode(.v6)]
+        ),
+        .executableTarget(
+            name: "issues-cli",
+            dependencies: ["CLI"],
+            swiftSettings: [.swiftLanguageMode(.v6)]
+        ),
         // Entity builders. Linked only by test targets, never shipped. Ticket 13.
         .target(
             name: "TestSupport",
@@ -52,6 +69,16 @@ let package = Package(
             name: "ServerTests",
             dependencies: [
                 "Server", "Core", "TestSupport",
+                .product(name: "HummingbirdTesting", package: "hummingbird"),
+            ],
+            swiftSettings: [.swiftLanguageMode(.v6)]
+        ),
+        // Depends on `Server` so CLI commands run against the real router
+        // rather than canned responses: the CLI exists to prove the contract.
+        .testTarget(
+            name: "CLITests",
+            dependencies: [
+                "CLI", "Core", "Server", "TestSupport",
                 .product(name: "HummingbirdTesting", package: "hummingbird"),
             ],
             swiftSettings: [.swiftLanguageMode(.v6)]

@@ -24,6 +24,9 @@ public enum ValidationCode: String, Hashable, Sendable, Codable {
     case tooLong
     case tooLarge
     case tooShort
+    /// Structurally wrong in a way no length rule describes — an email address
+    /// without an `@`, say.
+    case invalid
 }
 
 /// Pure, structural validation of values on their way *in*.
@@ -164,5 +167,58 @@ public enum Validation {
                 field: "password", code: .tooShort,
                 message: "A password must be at least \(minimumPasswordCharacters) characters.")
         ]
+    }
+}
+
+extension Validation {
+
+    /// Display names are short free text, and empty is not a name.
+    public static func displayName(_ value: String) -> [ValidationFailure] {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            return [.init(field: "displayName", code: .required, message: "A display name is required.")]
+        }
+        if trimmed.count > 200 {
+            return [
+                .init(
+                    field: "displayName", code: .tooLong,
+                    message: "A display name may be at most 200 characters.")
+            ]
+        }
+        return []
+    }
+
+    /// A deliberately shallow check: one `@`, something either side, a dot in the
+    /// domain, no spaces.
+    ///
+    /// Full RFC 5322 is famously not worth implementing, and a stricter rule
+    /// rejects addresses that genuinely work. The only thing that proves an
+    /// address is real is sending to it, which this instance does not do.
+    public static func email(_ value: String) -> [ValidationFailure] {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        func failure(_ message: String) -> [ValidationFailure] {
+            [.init(field: "email", code: .invalid, message: message)]
+        }
+
+        if trimmed.isEmpty {
+            return [.init(field: "email", code: .required, message: "An email address is required.")]
+        }
+        if trimmed.count > 320 {
+            return [
+                .init(
+                    field: "email", code: .tooLong, message: "An email address may be at most 320 characters."
+                )
+            ]
+        }
+        guard !trimmed.contains(" ") else { return failure("An email address may not contain spaces.") }
+
+        let parts = trimmed.split(separator: "@", omittingEmptySubsequences: false)
+        guard parts.count == 2, !parts[0].isEmpty, !parts[1].isEmpty else {
+            return failure("An email address must contain exactly one '@'.")
+        }
+        guard parts[1].contains("."), !parts[1].hasPrefix("."), !parts[1].hasSuffix(".") else {
+            return failure("An email address must have a domain like 'example.com'.")
+        }
+        return []
     }
 }

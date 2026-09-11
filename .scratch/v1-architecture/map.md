@@ -213,10 +213,6 @@ Repo initialised; SwiftPM package at root (ADR 0002). **Swift 6.3.3** is the glo
 | Sync envelopes | Push/pull, three outcomes, `epoch:seq` watermark, all 11 operation kinds round-tripped |
 | `URLSessionTransport` | Deliberately thin; mappings are pure and tested, the network call is not |
 
-### Corrections made to the spec during implementation
-
-- **Ticket 06 amended**: comments are created with `PUT` at a caller-supplied id, not `POST`. The route table contradicted the ticket's own Writes section and ADR 0005 — an offline retry must not post twice.
-
 ### Server progress
 
 Dependencies resolved as the research predicted: **Hummingbird 2.26.0, GRDB 7.11.1, NIO 2.102.0**. `Package.resolved` is committed (this package ships executables, so the graph is pinned). `Server` is a **library** with a thin `issues-server` executable on top, so it is testable without main-symbol clashes.
@@ -255,10 +251,49 @@ WAL mode and foreign-key enforcement are tested explicitly: WAL serialising writ
 - **Types written decode-only for the client keep needing `Encodable`** — `ServerMeta`, `Paginated`, `SyncRecord`, `SyncResult`, `SyncPushResponse`, `SyncChange`, `SyncPullResponse`. Default API/sync types to `Codable`.
 - Five malformed-row guards are uncovered by design: each defends against a corrupted database row whose non-lookup UUID columns are invalid, which foreign keys make unreachable in a test.
 
+### CLI: foundations, auth and issue reads
+
+**601 tests. Core 99.23%, Server 98.20%, CLI 86.55%** — CLI comfortably over ticket 13's 70% floor.
+
+The decision that shaped everything else: **CLI tests run in-process against the real router**. A transport in `Tests/CLITests` dispatches a Core `HTTPRequest` straight into `IssuesRouter` through `HummingbirdTesting`, over a real in-memory database with real sessions and real password hashes. No sockets, no canned responses. This is what makes the CLI worth building before the apps — it is a contract test suite that happens to have a command line.
+
+| Piece | Notes |
+| --- | --- |
+| `CommandGrammar` | `issue` as the implied noun, as a pure `[String] -> [String]` rewrite before parsing. ArgumentParser has no default subcommand |
+| `ExitStatus` | Ticket 11's published codes. 3 ≠ 6 is where the server's 410-vs-404 decision finally reaches a user |
+| `IssuesCLI.run` | **Returns** its exit code rather than calling `exit`, so all of dispatch is testable. Only `main.swift` exits |
+| `CommandContext` | Every outside dependency as one injected value, bound as a task local because ArgumentParser owns command construction |
+| `CLIConfiguration` | `config.toml` + `.issues.toml` walked up from the working directory + `ISSUES_*`, most specific winning |
+| `CredentialStore` | Keychain by default, keyed by **origin**; a `0600` file store drives the tests |
+| `auth login/logout/status` | The only place a password is handled. Existing sessions are not silently replaced |
+| `issue list/show` | Filters map onto the API's OR-within/AND-across rule; `--limit` walks pages without ever naming a cursor |
+
+### Corrections made to the spec during implementation
+
+- **Ticket 06 amended**: comments are created with `PUT` at a caller-supplied id, not `POST` — the route table contradicted the ticket's own Writes section and ADR 0005.
+- **Core's `SyncEntity`/`SyncRecord` extended** with `project` and `user`: pull is a unified stream and a client's replica needs both to render an Issue at all. Neither is pushable, which `SyncOperation` still enforces.
+- **The User resource was never implemented.** `/users`, `/users/me` and `/users/:id` are specified in ticket 06 and `UserEndpoints` existed in Core, but no route was ever registered — the server was called complete without them. Found when `auth status` 404ed. Now built, with `/users/me` tested against being shadowed by `/users/:id` at the same path depth, and deactivation revoking the user's sessions (without that, "deactivate" would mean nothing for up to sixty days).
+- **`LoginRequest`/`LoginResponse` moved into Core.** They were declared in `Server`, so the CLI could not name the type it had to decode — exactly the drift that sharing DTOs is supposed to prevent.
+- **`FlatTOML` moved into Core**, shared by the server's config and the CLI's, so the two cannot come to accept different dialects of the same format.
+
+### Open gaps
+
+- **`expand` is not implemented server-side.** Ticket 06 specifies it and `Expansion` exists in Core, but no route reads the parameter. The CLI resolves assignee names with a second request instead; a list view in the apps will want the real thing.
+- **`.issues.toml` may not set `url`** — a repository-controlled file that could retarget the CLI at another host would make `git clone` enough to redirect traffic. Refused explicitly, and tested.
+
+### Notes for whoever picks this up
+
+- **`String + String` chains are a build hazard.** A test file assembling JSON by concatenation took the test target from 6.5 seconds to over nine minutes. Use interpolation or `JSONSerialization`. The same blowup recurs inside `#expect` — hoist anything with `map`/`reversed` into a typed local first.
+- **Path parameter names must match across route groups at the same depth.** `/projects/:id` in one file and `/projects/:projectId/labels` in another hung the suite at runtime.
+- **Types written decode-only for the client keep needing `Encodable`** — `ServerMeta`, `Paginated`, `SyncRecord`, `SyncResult`, `SyncPushResponse`, `SyncChange`, `SyncPullResponse`. Default API/sync types to `Codable`.
+- **`ExitCode` collides with ArgumentParser's own type**; the CLI's is `ExitStatus`. `CommandError` is not public, so a parse failure is identified by ArgumentParser's own `exitCode(for:)` classification.
+- **A leading `-` cannot start an option's value**: `--sort -updated` parses as a flag. `--reverse` exists because of it; `--sort=-updated` also works.
+- **The coverage gate keeps finding missing *positive* paths**, never missing negative ones. This session: no test that an Admin could promote anyone, none for `--project`, `--priority` or `--server`. Write the allow case beside the deny case, every time.
+
 ### Next
 
-1. **Login and password hashing.** Needs a dependency decision: CryptoKit has no Argon2id, which ADR 0006 specifies.
-2. **First-run bootstrap** — the one-time token on stdout, plus env-var seeding (ticket 07/09).
-3. **Config loading** — TOML plus `ISSUES_*` overrides (ticket 09).
-4. **Background work** — expired-session reaping under ServiceLifecycle (ticket 04).
-5. Then the **CLI**, which exercises the whole contract from a terminal, before the apps.
+1. **`issue create` / `edit` / `comment`** — the write verbs, including `--unset` for Merge Patch's third state and the `$EDITOR` path.
+2. **`project`, `label` and `user` nouns**, plus the destructive-command confirmations (`--yes` off a TTY).
+3. **`issues completion`** for zsh/bash/fish.
+4. **`expand`** server-side, so list views stop costing a second request.
+5. Then the **native apps** (ticket 10, variant C), and **MCP** last.
