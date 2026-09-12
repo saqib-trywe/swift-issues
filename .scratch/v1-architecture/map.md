@@ -366,6 +366,25 @@ Started on the client engine rather than a throwaway harness: ticket 05 and ADR 
 | Label membership converges on **`(issue_id, label_id)`** | Mirrors the server. Each client invents its own row id; the natural key is what makes them converge |
 | An undecodable queue row is **skipped, not fatal** | One bad row must not make the whole queue unreadable, which is exactly when it matters most |
 
+### The sync protocol, exercised by a client at last
+
+**921 tests. ClientStore 98.45%.** `SyncEngine` pushes and pulls against the **real router** — real routing, real persistence, the real push and pull services, no canned responses. This is the first time the protocol has been driven by a client rather than by the server's own tests, and it found two things.
+
+**A real bug: a locally created row kept its placeholders forever.** A client cannot know an issue's `reporterId` or `via` — both come from the token server-side — so a local create inserts placeholders. The pull's `ON CONFLICT DO UPDATE` listed only the mutable fields, treating the rest as immutable, so the authoritative record never replaced them. Now `project_id`, `reporter_id`, `via` and `created_at` are all overwritten on the first real record, for issues, comments and labels alike.
+
+**A test whose premise was wrong.** I expected a comment queued behind a bad create to be reported *blocked*. It is not: on the first push nothing is known bad yet, so both go out and the server rejects each on its own merits — which is better, because each gets its own error. Blocking matters on the *retry*. Both behaviours now have a test, and the second is named to say it is the behaviour rather than a bug.
+
+| Decision | Why |
+| --- | --- |
+| Push **does not adopt** the push response's watermark | It is the server's position *after* the batch, so taking it would skip everything before — on a first sync, the entire history. There is a test for exactly that |
+| `sync()` is **push then pull** | The pull afterwards carries this device's own writes back with the server's timestamps, so the replica ends up holding exactly what the server holds |
+| **One transaction per pulled page** | A crash mid-page must not leave the watermark ahead of the records it claims to cover, which would skip those changes permanently |
+| A stale epoch **resyncs but keeps the queue** | Base records are rebuildable; unsent user work is not. Losing it to a server-side restore is the silent data loss ADR 0004 forbids. Tested, including that the kept work still reaches the server afterwards |
+| A superseded write **leaves the queue** rather than being quarantined | Quarantine means repair and retry, and there is nothing left to retry against. The payload is handed back intact with what beat it |
+| A tombstone for an **unseen** record still creates a row | Pull order is change order, so a tombstone can arrive first. Forgetting it would resurrect the record on a later pull |
+
+Proven end to end: a write on one device reaching another, and **concurrent edits to different fields both surviving** — the per-field last-write-wins claim the whole architecture rests on.
+
 ### Open gaps
 
 - **`expand` is not implemented server-side.** Ticket 06 specifies it and `Expansion` exists in Core, but no route reads the parameter. The CLI resolves assignee names with a second request instead; a list view in the apps will want the real thing.
@@ -388,8 +407,7 @@ Started on the client engine rather than a throwaway harness: ticket 05 and ADR 
 
 ### Next
 
-1. **Push**: send `readyOperations`, apply the three outcomes, quarantine rejections, acknowledge the rest. Against the real router, as `CLITests` does.
-2. **Pull**: apply the unified stream to the replica, advance the `epoch:seq` watermark, and force a full resync on a stale epoch.
-3. **The read-time overlay** — base record plus pending operations applied on read, and "which fields are dirty", which the UI needs for conflict presentation.
-4. **Superseded-by-deletion**: a tombstone arriving for an entity with pending edits drops them and hands the text back, rather than quarantining something that can never succeed.
-5. Then the **apps** (ticket 10, variant C), and **MCP** last.
+1. **The read-time overlay** — base record plus pending operations applied on read, and "which fields are dirty", which the UI needs for conflict presentation. The last piece of ticket 05 still unbuilt.
+2. **Surfacing superseded writes**: the engine returns them, but nothing stores them for the user to recover from after the fact.
+3. **`expand`** server-side (ticket 06), so list views stop costing a second request.
+4. Then the **apps** (ticket 10, variant C), and **MCP** last.

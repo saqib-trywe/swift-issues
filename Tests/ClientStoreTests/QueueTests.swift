@@ -388,3 +388,314 @@ struct QueueTests {
         #expect(before.map(\.sequence) == after.map(\.sequence))
     }
 }
+
+/// The entity paths the issue-focused tests do not reach.
+@Suite("Local apply: comments and labels")
+struct LocalApplyTests {
+
+    private func store() throws -> ReplicaDatabase { try ReplicaDatabase.inMemory() }
+
+    @Test("editing a comment updates its body locally")
+    func editingACommentUpdatesItsBody() throws {
+        let database = try store()
+        let id = Core.Comment.ID()
+        try database.enqueue(
+            .putComment(
+                opId: UUID(), id: id, at: Date(),
+                body: CommentCreate(issueId: DomainIssue.ID(), body: "First go")))
+
+        var patch = CommentPatch()
+        patch.body = .set("Second go")
+        try database.enqueue(.patchComment(opId: UUID(), id: id, at: Date(), body: patch))
+
+        let body = try database.reader.read { db in
+            try String.fetchOne(
+                db, sql: "SELECT body FROM comment WHERE id = ?",
+                arguments: [id.rawValue.uuidString])
+        }
+        #expect(body == "Second go")
+    }
+
+    @Test("creating a label stores it locally")
+    func creatingALabelStoresIt() throws {
+        let database = try store()
+        let id = Label.ID()
+        try database.enqueue(
+            .putLabel(
+                opId: UUID(), id: id, at: Date(),
+                body: LabelCreate(name: "bug", color: "#2D6CDF")))
+
+        let row = try database.reader.read { db in
+            try Row.fetchOne(
+                db, sql: "SELECT * FROM label WHERE id = ?", arguments: [id.rawValue.uuidString])
+        }
+        let stored = try #require(row)
+        #expect(stored["name"] == "bug")
+        #expect(stored["color"] == "#2D6CDF")
+    }
+
+    @Test("editing a label updates only the fields it names")
+    func editingALabelUpdatesOnlyNamedFields() throws {
+        let database = try store()
+        let id = Label.ID()
+        try database.enqueue(
+            .putLabel(
+                opId: UUID(), id: id, at: Date(),
+                body: LabelCreate(name: "bug", color: "#2D6CDF")))
+
+        var colourOnly = LabelPatch()
+        colourOnly.color = .set("#123ABC")
+        try database.enqueue(.patchLabel(opId: UUID(), id: id, at: Date(), body: colourOnly))
+
+        var nameOnly = LabelPatch()
+        nameOnly.name = .set("defect")
+        try database.enqueue(.patchLabel(opId: UUID(), id: id, at: Date(), body: nameOnly))
+
+        let row = try database.reader.read { db in
+            try Row.fetchOne(
+                db, sql: "SELECT * FROM label WHERE id = ?", arguments: [id.rawValue.uuidString])
+        }
+        let stored = try #require(row)
+        #expect(stored["name"] == "defect")
+        #expect(stored["color"] == "#123ABC")
+    }
+
+    @Test("deleting a label tombstones it")
+    func deletingALabelTombstonesIt() throws {
+        let database = try store()
+        let id = Label.ID()
+        try database.enqueue(
+            .putLabel(
+                opId: UUID(), id: id, at: Date(),
+                body: LabelCreate(name: "bug", color: "#2D6CDF")))
+        try database.enqueue(.deleteLabel(opId: UUID(), id: id, at: Date()))
+
+        let deletedAt = try database.reader.read { db in
+            try Date.fetchOne(
+                db, sql: "SELECT deleted_at FROM label WHERE id = ?",
+                arguments: [id.rawValue.uuidString])
+        }
+        #expect(deletedAt != nil)
+    }
+
+    /// Removing a label is a tombstone on the link, never a deletion — so a later
+    /// re-add converges rather than conflicting.
+    @Test("removing then re-adding a label revives the membership")
+    func removingThenReAddingRevivesTheMembership() throws {
+        let database = try store()
+        let membership = IssueLabel.ID()
+        let issue = DomainIssue.ID()
+        let label = Label.ID()
+
+        try database.enqueue(
+            .addLabel(opId: UUID(), id: membership, at: Date(), issueId: issue, labelId: label))
+        try database.enqueue(.removeLabel(opId: UUID(), id: membership, at: Date()))
+
+        let removed = try database.reader.read { db in
+            try Date.fetchOne(db, sql: "SELECT deleted_at FROM issue_label")
+        }
+        #expect(removed != nil)
+
+        try database.enqueue(
+            .addLabel(opId: UUID(), id: membership, at: Date(), issueId: issue, labelId: label))
+
+        let revived = try database.reader.read { db in
+            try Date.fetchOne(db, sql: "SELECT deleted_at FROM issue_label")
+        }
+        #expect(revived == nil)
+        let count = try database.reader.read { db in
+            try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM issue_label")
+        }
+        #expect(count == 1)
+    }
+}
+
+/// Applying pulled changes, including the awkward orders the stream can arrive in.
+@Suite("Applying pulled changes")
+struct ApplyPulledChangesTests {
+
+    private let watermark = Watermark(epoch: "e1", sequence: 1)!
+
+    @Test("a pulled record is stored")
+    func pulledRecordIsStored() throws {
+        let database = try ReplicaDatabase.inMemory()
+        let issue = DomainIssue.fixture(key: IssueKey("PROJ-7"), title: "From the server")
+
+        try database.apply(
+            [SyncChange(entity: .issue, id: issue.id.rawValue, deleted: false, record: .issue(issue))],
+            upTo: watermark)
+
+        let title = try database.reader.read { db in
+            try String.fetchOne(
+                db, sql: "SELECT title FROM issue WHERE id = ?",
+                arguments: [issue.id.rawValue.uuidString])
+        }
+        #expect(title == "From the server")
+        #expect(try database.watermark() == watermark)
+    }
+
+    /// Pull order is change order, so a tombstone can arrive for a record this
+    /// client has never seen. Forgetting it would resurrect the record on a later
+    /// pull.
+    @Test(
+        "a tombstone for an unseen record is still recorded",
+        arguments: [
+            SyncEntity.issue, .comment, .label,
+        ])
+    func tombstoneForUnseenRecordIsRecorded(_ entity: SyncEntity) throws {
+        let database = try ReplicaDatabase.inMemory()
+        let id = UUID()
+
+        try database.apply(
+            [SyncChange(entity: entity, id: id, deleted: true, record: nil)], upTo: watermark)
+
+        let table = entity == .issue ? "issue" : (entity == .comment ? "comment" : "label")
+        let deletedAt = try database.reader.read { db in
+            try Date.fetchOne(
+                db, sql: "SELECT deleted_at FROM \(table) WHERE id = ?",
+                arguments: [id.uuidString])
+        }
+        #expect(deletedAt != nil, "the tombstone for an unseen \(entity.rawValue) was dropped")
+    }
+
+    @Test("a tombstone for a comment clears its body")
+    func tombstoneForACommentClearsItsBody() throws {
+        let database = try ReplicaDatabase.inMemory()
+        let comment = Core.Comment.fixture(body: "Said something")
+
+        try database.apply(
+            [
+                SyncChange(
+                    entity: .comment, id: comment.id.rawValue, deleted: false,
+                    record: .comment(comment))
+            ], upTo: watermark)
+        try database.apply(
+            [SyncChange(entity: .comment, id: comment.id.rawValue, deleted: true, record: nil)],
+            upTo: watermark)
+
+        let body = try database.reader.read { db in
+            try String.fetchOne(
+                db, sql: "SELECT body FROM comment WHERE id = ?",
+                arguments: [comment.id.rawValue.uuidString])
+        }
+        #expect(body == nil)
+    }
+
+    /// Projects archive and Users deactivate; neither is ever tombstoned, so a
+    /// tombstone for one must not corrupt the row.
+    @Test("a tombstone for a project or user is ignored", arguments: [SyncEntity.project, .user])
+    func tombstoneForProjectOrUserIsIgnored(_ entity: SyncEntity) throws {
+        let database = try ReplicaDatabase.inMemory()
+        try database.apply(
+            [SyncChange(entity: entity, id: UUID(), deleted: true, record: nil)], upTo: watermark)
+
+        let table = entity == .project ? "project" : "user"
+        let count = try database.reader.read { db in
+            try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM \(table)")
+        }
+        #expect(count == 0)
+    }
+
+    /// One malformed entry must not stall the whole stream.
+    @Test("a change with neither a record nor a tombstone is skipped")
+    func changeWithNeitherRecordNorTombstoneIsSkipped() throws {
+        let database = try ReplicaDatabase.inMemory()
+        let issue = DomainIssue.fixture()
+
+        try database.apply(
+            [
+                SyncChange(entity: .issue, id: UUID(), deleted: false, record: nil),
+                SyncChange(
+                    entity: .issue, id: issue.id.rawValue, deleted: false, record: .issue(issue)),
+            ], upTo: watermark)
+
+        let count = try database.reader.read { db in
+            try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM issue")
+        }
+        #expect(count == 1, "the good change after the bad one was lost")
+    }
+
+    @Test("labels and memberships arrive through the stream")
+    func labelsAndMembershipsArrive() throws {
+        let database = try ReplicaDatabase.inMemory()
+        let label = Label.fixture(name: "bug")
+        let link = IssueLabel.fixture(issueId: DomainIssue.ID(), labelId: label.id)
+
+        try database.apply(
+            [
+                SyncChange(
+                    entity: .label, id: label.id.rawValue, deleted: false, record: .label(label)),
+                SyncChange(
+                    entity: .issueLabel, id: link.id.rawValue, deleted: false,
+                    record: .issueLabel(link)),
+            ], upTo: watermark)
+
+        let counts = try database.reader.read { db in
+            (
+                labels: try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM label") ?? 0,
+                links: try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM issue_label") ?? 0
+            )
+        }
+        #expect(counts.labels == 1)
+        #expect(counts.links == 1)
+    }
+
+    @Test("a membership tombstone arrives through the stream")
+    func membershipTombstoneArrives() throws {
+        let database = try ReplicaDatabase.inMemory()
+        let link = IssueLabel.fixture(issueId: DomainIssue.ID(), labelId: Label.ID())
+
+        try database.apply(
+            [
+                SyncChange(
+                    entity: .issueLabel, id: link.id.rawValue, deleted: false,
+                    record: .issueLabel(link))
+            ], upTo: watermark)
+        try database.apply(
+            [SyncChange(entity: .issueLabel, id: link.id.rawValue, deleted: true, record: nil)],
+            upTo: watermark)
+
+        let deletedAt = try database.reader.read { db in
+            try Date.fetchOne(db, sql: "SELECT deleted_at FROM issue_label")
+        }
+        #expect(deletedAt != nil)
+    }
+
+    /// The watermark and the records it covers must move together, or a crash
+    /// between them skips changes permanently.
+    @Test("the watermark only advances with its page")
+    func watermarkOnlyAdvancesWithItsPage() throws {
+        let database = try ReplicaDatabase.inMemory()
+        let later = Watermark(epoch: "e1", sequence: 99)!
+
+        try database.apply([], upTo: watermark)
+        #expect(try database.watermark() == watermark)
+
+        try database.apply([], upTo: later)
+        #expect(try database.watermark() == later)
+    }
+
+    @Test("a full resync clears records but keeps the queue")
+    func fullResyncClearsRecordsButKeepsTheQueue() throws {
+        let database = try ReplicaDatabase.inMemory()
+        let issue = DomainIssue.fixture()
+        try database.apply(
+            [SyncChange(entity: .issue, id: issue.id.rawValue, deleted: false, record: .issue(issue))],
+            upTo: watermark)
+        try database.enqueue(
+            .putIssue(
+                opId: UUID(), id: DomainIssue.ID(), at: Date(),
+                body: IssueCreate(projectId: Project.ID(), title: "Unsent")))
+
+        try database.resetForFullResync()
+
+        let remaining = try database.reader.read { db in
+            try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM issue")
+        }
+        // The locally created row goes too: it is a base record, and the queue will
+        // recreate it on the next push.
+        #expect(remaining == 0)
+        #expect(try database.watermark() == nil)
+        #expect(try database.allOperations().count == 1)
+    }
+}
