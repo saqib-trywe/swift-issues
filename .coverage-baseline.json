@@ -1,6 +1,7 @@
 {
+  "AppCore": 97.04,
   "CLI": 92.93,
-  "ClientStore": 99.6,
+  "ClientStore": 99.58,
   "Core": 99.09,
   "Server": 98.41
 }

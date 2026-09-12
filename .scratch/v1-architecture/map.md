@@ -444,6 +444,32 @@ Tested that unrelated pending work is untouched and still goes out afterwards �
 
 The CLI's `UserDirectory` — a second request per list, added when the server could not expand — is now deleted.
 
+### The apps: shared behaviour layer
+
+**1,014 tests. AppCore 97.04%** (floor 80, per ticket 13's view-model rule).
+
+Ticket 10's variant C keeps the behaviour written **once** and placed per platform, so the shared layer lives in a package target rather than in either app shell. That keeps it driveable from `swift test` — and `make build-ios` compiles it for iOS on every CI run, because nothing else in the suite would notice it breaking there.
+
+**All five required sync surfaces now have state**, which is what makes them surfaces rather than decoration:
+
+| Surface | Where it comes from |
+| --- | --- |
+| Quarantine (needs attention) | `quarantinedWork()` — rejected writes with their problems |
+| Superseded-by-deletion | `supersededWrites()` — the user's text, kept |
+| Needs re-authentication | A state on the model, deliberately **not** derived from a query: a rejected token is not a rejected write, and the remedy is logging in rather than repairing |
+| Full-resync progress | `.rebuilding`, presented as normal recovery rather than as an error |
+| **Advisory pre-push warning** | New. `staleEdits()` compares an unsent edit's own timestamp with the base record's `updatedAt` |
+
+The advisory check had no implementation anywhere. It is the **only** place a user can learn their offline edit is about to overwrite newer work, because ADR 0005 rejected optimistic concurrency deliberately — there is no server-side veto to fall back on.
+
+- It warns with a **one-second threshold**, not on strict inequality. Timestamps lose sub-millisecond precision differently through SQLite and through JSON, so two records written from the same instant come back microseconds apart; warning on that noise teaches people to ignore the warning. Found by a test that compared two round-tripped dates for equality — the same precision trap as before.
+- **Advisory, never a veto**: a stale edit still pushes, and there is a test saying so. Last-write-wins is the intended behaviour.
+- A **create is never stale** (nothing to overwrite) and a **delete is never flagged** (terminal by design, ADR 0003).
+
+**`attentionCount` deliberately excludes queued work and advisory warnings.** A badge that is always lit is a badge nobody reads: ordinary pending work is going out on its own, and a stale-edit warning would keep the badge on for as long as an old edit sits in the queue.
+
+Also here: the `unknown`-enum read-only rule (a picker would let a user clobber a value this build cannot represent), the no-key-until-first-sync state, and a deleted comment keeping its place in a thread.
+
 ### Open gaps
 
 - **Four unreachable defensive lines in Core are uncovered**, which is why the baseline moved from 99.29% to 99.07%: three `default: nil` folds that a per-entity slot can never reach, and the cycle fallback in the topological sort, which this domain cannot produce. The fallback emits the queue head rather than stopping, because silently dropping operations is the one outcome ADR 0004 forbids.
@@ -465,7 +491,6 @@ The CLI's `UserDirectory` — a second request per list, added when the server c
 
 ### Next
 
-**Everything except the two UI surfaces is built**: Core, server, CLI and the client sync engine, with ticket 06's contract now complete.
-
-1. The **apps** (ticket 10, variant C): a separate Xcode workspace over `ClientStore`, with `ValueObservation` wrapped in an `@Observable` type per ADR 0008. The sync protocol is proven end to end and `expand` removes the list N+1, so what remains is genuinely UI work.
-2. **MCP** last. It has what it needs: agent tokens are mintable and an agent's authority is fixed and narrower than its owner's.
+1. **The shared SwiftUI components** — `IssueRowContent`, `SyncStatusView`, `IssueKeyLabel` and the atoms. They compile-check but do not render, so their correctness rests on review; the models beneath them are already gated.
+2. **The app shells**: an Xcode project with the macOS composition (`NavigationSplitView`, sortable `Table`, keyboard-first, plus the Mac-only token and session administration) and the iPhone/iPad ones. This is the first work that cannot be verified from `swift test`.
+3. **MCP** last.

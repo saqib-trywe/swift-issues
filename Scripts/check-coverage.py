@@ -35,6 +35,9 @@ FLOORS = {
     # awkward to reach; above the server's 80 because silent divergence is the
     # worst failure this project has.
     "ClientStore": 85.0,
+    # Ticket 13: view models 80%, view bodies ungated. This target holds the
+    # models; the app shells that hold the view bodies are outside the package.
+    "AppCore": 80.0,
 }
 
 TOLERANCE = 0.05  # float noise, not slack

@@ -1,4 +1,4 @@
-.PHONY: build test test-core lint format coverage coverage-baseline clean
+.PHONY: build build-ios test test-core lint format coverage coverage-baseline clean
 
 build:
 	swift build
@@ -11,6 +11,11 @@ test-core:
 	swift test --filter CoreTests
 
 # The toolchain-bundled formatter, so local and CI share one version.
+build-ios:
+	@# The shared app layer must compile for iOS, not only for the host. The server
+	@# and CLI targets are macOS-only and are not part of this scheme.
+	xcodebuild -scheme AppCore -destination 'generic/platform=iOS' build | tail -3
+
 lint:
 	swift format lint --recursive --strict Sources Tests
 

@@ -65,6 +65,11 @@ jobs:
       - name: Coverage gates
         run: python3 Scripts/check-coverage.py
 
+      # The shared app layer ships on iOS and iPadOS as well as macOS, and nothing
+      # else in the suite would notice it breaking there.
+      - name: Build the shared app layer for iOS
+        run: make build-ios
+
   lint:
     runs-on: macos-latest
     timeout-minutes: 10

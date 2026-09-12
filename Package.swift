@@ -3,10 +3,13 @@ import PackageDescription
 
 let package = Package(
     name: "Issues",
-    platforms: [.macOS(.v26)],
+    // iOS is declared so the shared app layer can be built for it. The server and
+    // CLI targets are macOS-only and simply are not part of an iOS build.
+    platforms: [.macOS(.v26), .iOS(.v26)],
     products: [
         .library(name: "Core", targets: ["Core"]),
         .library(name: "ClientStore", targets: ["ClientStore"]),
+        .library(name: "AppCore", targets: ["AppCore"]),
         .executable(name: "issues-server", targets: ["issues-server"]),
         .executable(name: "issues", targets: ["issues-cli"]),
     ],
@@ -71,6 +74,15 @@ let package = Package(
             ],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
+        // The apps' shared behaviour layer: observable models and the five sync
+        // surfaces' state. Ticket 10's variant C keeps this written once and
+        // *placed* twice, so it lives here rather than in either app shell — which
+        // also keeps it driveable from `swift test`.
+        .target(
+            name: "AppCore",
+            dependencies: ["Core", "ClientStore"],
+            swiftSettings: [.swiftLanguageMode(.v6)]
+        ),
         // Entity builders. Linked only by test targets, never shipped. Ticket 13.
         .target(
             name: "TestSupport",
@@ -103,6 +115,11 @@ let package = Package(
                 "ClientStore", "Core", "Server", "TestSupport",
                 .product(name: "HummingbirdTesting", package: "hummingbird"),
             ],
+            swiftSettings: [.swiftLanguageMode(.v6)]
+        ),
+        .testTarget(
+            name: "AppCoreTests",
+            dependencies: ["AppCore", "Core", "ClientStore", "TestSupport"],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
         .testTarget(
