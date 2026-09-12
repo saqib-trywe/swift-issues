@@ -409,6 +409,25 @@ Proven through the real sync loop: an edit stays visible from typing through to 
 
 `PendingOperation` lost its `Identifiable` and `Hashable` conformances — nothing used them, and a hand-written `hash` no test exercises is a liability.
 
+### Superseded writes, and the tombstone-on-pull path
+
+**955 tests. ClientStore 99.60%.** The client engine is now complete against ticket 05.
+
+Ticket 05 asks for this in two places, and only one was built:
+
+- **Push** returns `superseded` when the entity is tombstoned. That was handled, but only *returned* — a summary from a sync nothing was watching is the same as losing the user's text. It is now persisted in a `superseded_write` table (migration v2).
+- **Pull** was the missing half. A tombstone arriving for an entity with pending edits now drops that work immediately and records it, rather than leaving it to fail at the next push. The user learns as soon as the client knows.
+
+Dropped **transitively**, which falls straight out of the derived dependency rule: a pending comment on a deleted issue goes too, and an edit to that comment after it. Three reasons are distinguished — `rejectedByServer`, `deletedElsewhere`, `dependencyRemoved` — because "the server refused it" and "somebody deleted the issue while you were typing" are different things to tell a person.
+
+| Decision | Why |
+| --- | --- |
+| Dropped, never **quarantined** | Quarantine means repair and retry, and there is nothing left to retry against. A quarantined operation here would fail forever |
+| Kept **until dismissed**, not expired | It is the user's text; deciding when they have finished with it is not ours to make on a timer |
+| `current` is stored when the server supplies it | So the UI can show what won beside what was lost |
+
+Tested that unrelated pending work is untouched and still goes out afterwards — the same no-head-of-line-blocking property, in a different guise.
+
 ### Open gaps
 
 - **`expand` is not implemented server-side.** Ticket 06 specifies it and `Expansion` exists in Core, but no route reads the parameter. The CLI resolves assignee names with a second request instead; a list view in the apps will want the real thing.
@@ -431,9 +450,8 @@ Proven through the real sync loop: an edit stays visible from typing through to 
 
 ### Next
 
-**Ticket 05 is complete.** The client engine holds a replica, queues writes offline, reconciles, and shows unsent work per field.
+**Ticket 05 is complete**, and with it the whole non-UI half of the client.
 
-1. **Surfacing superseded writes** — the engine returns them, but nothing persists them for a user to recover from after the fact. Small, and the last loose end in the engine.
-2. **`expand`** server-side (ticket 06), so list views stop costing a second request.
-3. Then the **apps** (ticket 10, variant C): a separate Xcode workspace over `ClientStore`, with `ValueObservation` wrapped in an `@Observable` type. The sync protocol is now proven, so what is left there is genuinely UI work.
-4. **MCP** last.
+1. **`expand`** server-side (ticket 06) — specified, never implemented, and the reason the CLI resolves assignee names with a second request. The apps will want it for list views.
+2. The **apps** (ticket 10, variant C): a separate Xcode workspace over `ClientStore`, with `ValueObservation` wrapped in an `@Observable` type. The sync protocol is proven end to end, so what remains there is genuinely UI work.
+3. **MCP** last.

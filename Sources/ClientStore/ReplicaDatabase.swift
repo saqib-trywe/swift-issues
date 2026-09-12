@@ -169,6 +169,26 @@ public struct ReplicaDatabase: Sendable {
             try db.execute(sql: "INSERT INTO sync_state (id, watermark) VALUES (1, NULL)")
         }
 
+        migrator.registerMigration("v2-superseded-writes") { db in
+            // Work that can never be sent, kept so the user can get their text back.
+            //
+            // ADR 0005's third outcome only helps if it survives the moment it
+            // happens: a summary returned from a sync that nothing was watching is
+            // the same as losing the text.
+            try db.create(table: "superseded_write") { t in
+                t.primaryKey("op_id", .text)
+                t.column("entity_type", .text).notNull()
+                t.column("entity_id", .text).notNull()
+                // The operation itself, so the user's own words are recoverable.
+                t.column("payload", .text).notNull()
+                // What won, when the server told us. Absent when a tombstone arrived
+                // through pull and the record is simply gone.
+                t.column("current", .text)
+                t.column("reason", .text).notNull()
+                t.column("occurred_at", .datetime).notNull()
+            }
+        }
+
         return migrator
     }
 }

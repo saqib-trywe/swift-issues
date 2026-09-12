@@ -33,11 +33,13 @@ public struct SupersededWrite: Sendable, Equatable {
 }
 
 /// What a pull did.
-public struct PullSummary: Sendable, Equatable {
+public struct PullSummary: Sendable {
     public var changes: Int = 0
     public var pages: Int = 0
     /// True when a superseded epoch forced the replica to be rebuilt.
     public var resynced: Bool = false
+    /// Pending work dropped because a tombstone arrived for what it was writing to.
+    public var superseded: [SupersededRecord] = []
     public var watermark: Watermark?
 }
 
@@ -113,6 +115,10 @@ public actor SyncEngine {
                 // nothing left to retry against. Leaving it pending would produce an
                 // operation that fails forever (ticket 05).
                 guard let operation = byId[result.opId] else { continue }
+                // Kept before it is dropped: a summary returned from a sync nothing
+                // was watching is the same as losing the user's text.
+                try database.recordSuperseded(
+                    operation, current: result.current, reason: .rejectedByServer)
                 // Discarded, not acknowledged: the write never happened, so it must
                 // not reach the base tables.
                 try database.discard(result.opId)
@@ -158,6 +164,15 @@ public actor SyncEngine {
             // watermark ahead of the records it claims to cover, which would skip
             // those changes permanently.
             try database.apply(response.changes, upTo: response.nextWatermark)
+
+            // A tombstone landing on something still queued means that work can
+            // never be sent. Handled here rather than waiting for the next push to
+            // be told: the user learns as soon as the client knows, and quarantine
+            // would be wrong anyway — there is nothing left to retry against.
+            let tombstoned = response.changes
+                .filter(\.deleted)
+                .map { SyncReference(entity: $0.entity, id: $0.id) }
+            summary.superseded += try database.supersedePending(tombstoned: tombstoned)
 
             summary.changes += response.changes.count
             summary.pages += 1
