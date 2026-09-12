@@ -12,6 +12,15 @@ public enum Patchable<Value> {
     case cleared
     /// The key was present with a value: set the field to it.
     case set(Value)
+
+    /// Whether this says nothing at all.
+    ///
+    /// Available without `Value: Equatable`, so merge logic can ask the question
+    /// for any payload type — the same reason `Settable` has it.
+    public var isUnchanged: Bool {
+        if case .unchanged = self { return true }
+        return false
+    }
 }
 
 extension Patchable: Equatable where Value: Equatable {}

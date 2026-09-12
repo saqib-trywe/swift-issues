@@ -1,5 +1,6 @@
 {
   "CLI": 92.84,
-  "Core": 99.29,
+  "ClientStore": 94.35,
+  "Core": 99.07,
   "Server": 98.34
 }

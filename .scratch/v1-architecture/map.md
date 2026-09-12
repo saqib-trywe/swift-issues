@@ -343,9 +343,33 @@ What is worth testing here is not the generator but that our surface produces a 
 - **No dynamic completion** of project keys, issue keys or label names. Those would need a network call on every Tab, in a tool whose appeal is being fast, and would fail confusingly offline.
 - **fish is skipped, not failed, when absent** — a red suite for a missing shell teaches people to ignore red suites. It is therefore **unverified on this machine and in CI**, since neither has fish installed.
 
+### Client sync engine: the causal rules and the store
+
+**882 tests. Core 99.07%, Server 98.34%, CLI 92.84%, ClientStore 94.35%** (floor 85).
+
+Started on the client engine rather than a throwaway harness: ticket 05 and ADR 0008 specify the design closely enough that a harness would have been the same work, then discarded. It is a new Apple-only target (`ClientStore`) with no UI, driven entirely by tests.
+
+**Core's pure rules first**, as ticket 05's input 4 insists — replay ordering is a domain contract, so it must be provable without a database:
+
+- `SyncDependencies` — `target`, `prerequisites`, a **stable topological `ordered`**, and `blocked`. Projects and Users are deliberately *not* prerequisites: no operation can create one, so listing them would imply the queue might reorder to satisfy them, when an issue naming an unknown project simply has to fail at the server.
+- `SyncCoalescing` — patch merging, folding into an unsent create, and the two hard exclusions. Merging one entity's patches *through* writes to other entities is safe and deliberate: dependencies are on ids existing, never on another entity's field values.
+
+**A real ordering bug, caught while building the sort.** A patch with no prerequisites of its own looked "ready" and overtook its own create, which was still waiting on a label — so the patch would have reached the server before the record existed. Fixed by skipping any operation with an earlier unemitted sibling; there is a test named for it.
+
+**The store**: one SQLite file holding both replica and queue, because "apply locally *and* enqueue, or neither" has to be one transaction. There is a test that a failed enqueue rolls back the local write — without it the device is silently ahead of the server with nothing able to detect it.
+
+| Decision | Why |
+| --- | --- |
+| **Foreign keys off** on the client | Pull order is change order, so a comment can arrive pages before its issue. Enforcing them breaks first sync; orphans are stored and not displayed |
+| `pending_operation`'s primary key is a **sequence**, not the opId | Two operations made in the same millisecond must still have a defined order, and `created_at` cannot give one. The UUIDv7 trap, avoided by design this time |
+| **Partial index** on `state = 'pending'` | ADR 0004's no-head-of-line-blocking guarantee as an index rather than a code convention |
+| Label membership converges on **`(issue_id, label_id)`** | Mirrors the server. Each client invents its own row id; the natural key is what makes them converge |
+| An undecodable queue row is **skipped, not fatal** | One bad row must not make the whole queue unreadable, which is exactly when it matters most |
+
 ### Open gaps
 
 - **`expand` is not implemented server-side.** Ticket 06 specifies it and `Expansion` exists in Core, but no route reads the parameter. The CLI resolves assignee names with a second request instead; a list view in the apps will want the real thing.
+- **Four unreachable defensive lines in Core are uncovered**, which is why the baseline moved from 99.29% to 99.07%: three `default: nil` folds that a per-entity slot can never reach, and the cycle fallback in the topological sort, which this domain cannot produce. The fallback emits the queue head rather than stopping, because silently dropping operations is the one outcome ADR 0004 forbids.
 - **The server's SQLite files are `0644` inside a `0700` directory.** Protection is directory-level by design, but a file moved or copied out of it carries no protection of its own. Worth a `chmod` after open.
 - **`.issues.toml` may not set `url`** — a repository-controlled file that could retarget the CLI at another host would make `git clone` enough to redirect traffic. Refused explicitly, and tested.
 
@@ -364,10 +388,8 @@ What is worth testing here is not the generator but that our surface produces a 
 
 ### Next
 
-**The CLI is complete against ticket 11.** Four surfaces remain from the five in scope.
-
-1. **`expand`** server-side (ticket 06), so list views stop costing a second request for assignee names. Small, and the apps will want it.
-2. The **native apps** — ticket 10, variant C. The biggest remaining piece by far: a separate Xcode workspace, GRDB replica, the offline queue, and the sync loop the server has been built for.
-3. **MCP** last. It has what it needs now: agent tokens are mintable, and an agent's authority is fixed and narrower than its owner's.
-
-Before the apps, worth a deliberate pass: **the sync protocol has never been exercised by a real client.** The server's push and pull are tested from `ServerTests`, but nothing has yet held a replica, queued writes offline, and reconciled. A throwaway harness that does exactly that — no UI — would find protocol problems while they are still cheap.
+1. **Push**: send `readyOperations`, apply the three outcomes, quarantine rejections, acknowledge the rest. Against the real router, as `CLITests` does.
+2. **Pull**: apply the unified stream to the replica, advance the `epoch:seq` watermark, and force a full resync on a stale epoch.
+3. **The read-time overlay** — base record plus pending operations applied on read, and "which fields are dirty", which the UI needs for conflict presentation.
+4. **Superseded-by-deletion**: a tombstone arriving for an entity with pending edits drops them and hands the text back, rather than quarantining something that can never succeed.
+5. Then the **apps** (ticket 10, variant C), and **MCP** last.

@@ -31,6 +31,10 @@ FLOORS = {
     "Server": 80.0,
     "CLI": 70.0,
     "MCP": 70.0,
+    # Below Core's 90 because the engine has GRDB and transport paths that are
+    # awkward to reach; above the server's 80 because silent divergence is the
+    # worst failure this project has.
+    "ClientStore": 85.0,
 }
 
 TOLERANCE = 0.05  # float noise, not slack

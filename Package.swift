@@ -6,6 +6,7 @@ let package = Package(
     platforms: [.macOS(.v26)],
     products: [
         .library(name: "Core", targets: ["Core"]),
+        .library(name: "ClientStore", targets: ["ClientStore"]),
         .executable(name: "issues-server", targets: ["issues-server"]),
         .executable(name: "issues", targets: ["issues-cli"]),
     ],
@@ -59,6 +60,17 @@ let package = Package(
             dependencies: ["CLI"],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
+        // The client's replica and offline queue. Apple-only by design (ticket 05,
+        // input 3): the CLI and MCP are online-only and stateless, so nothing that
+        // needs to build on Linux imports this.
+        .target(
+            name: "ClientStore",
+            dependencies: [
+                "Core",
+                .product(name: "GRDB", package: "GRDB.swift"),
+            ],
+            swiftSettings: [.swiftLanguageMode(.v6)]
+        ),
         // Entity builders. Linked only by test targets, never shipped. Ticket 13.
         .target(
             name: "TestSupport",
@@ -79,6 +91,16 @@ let package = Package(
             name: "CLITests",
             dependencies: [
                 "CLI", "Core", "Server", "TestSupport",
+                .product(name: "HummingbirdTesting", package: "hummingbird"),
+            ],
+            swiftSettings: [.swiftLanguageMode(.v6)]
+        ),
+        // Depends on `Server` so the sync loop runs against the real router rather
+        // than canned responses, exactly as `CLITests` does.
+        .testTarget(
+            name: "ClientStoreTests",
+            dependencies: [
+                "ClientStore", "Core", "Server", "TestSupport",
                 .product(name: "HummingbirdTesting", package: "hummingbird"),
             ],
             swiftSettings: [.swiftLanguageMode(.v6)]
