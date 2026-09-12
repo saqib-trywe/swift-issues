@@ -25,13 +25,21 @@ struct IssueCommand: AsyncParsableCommand {
         @Option(name: [.short, .long], help: "Project key. Defaults to the configured project.")
         var project: String?
 
-        @Option(help: "Status, repeatable or comma-separated.")
+        // Completion lists the known values: `inProgress` is the one nobody
+        // remembers the spelling of, which is exactly what completion is for.
+        @Option(
+            help: "Status, repeatable or comma-separated.",
+            completion: .list(Status.known.map(\.wireValue)))
         var status: [String] = []
 
-        @Option(help: "Priority, repeatable or comma-separated.")
+        @Option(
+            help: "Priority, repeatable or comma-separated.",
+            completion: .list(Priority.known.map(\.wireValue)))
         var priority: [String] = []
 
-        @Option(help: "Assignee: 'me', 'none', or a user id.")
+        @Option(
+            help: "Assignee: 'me', 'none', or a user id.",
+            completion: .list(["me", "none"]))
         var assignee: String?
 
         @Option(help: "Label name, repeatable or comma-separated.")
@@ -42,7 +50,9 @@ struct IssueCommand: AsyncParsableCommand {
         @Option(name: .customLong("query"), help: "Match text in the title or description.")
         var query: String?
 
-        @Option(help: "Order by: updated, created, priority, due.")
+        @Option(
+            help: "Order by: updated, created, priority, due.",
+            completion: .list(["updated", "created", "priority", "due"]))
         var sort: String?
 
         // A leading '-' also reverses, matching the wire format, but argv makes

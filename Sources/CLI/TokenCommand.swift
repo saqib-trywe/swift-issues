@@ -31,7 +31,9 @@ extension AuthCommand {
                     can be captured straight into a variable.
                     """)
 
-            @Option(help: "Kind: \(TokenKind.known.map(\.wireValue).joined(separator: ", ")).")
+            @Option(
+                help: "Kind: \(TokenKind.known.map(\.wireValue).joined(separator: ", ")).",
+                completion: .list(TokenKind.known.map(\.wireValue)))
             var kind: String = "human"
 
             @Option(name: [.short, .long], help: "What this token is for, shown in listings.")

@@ -30,3 +30,8 @@ public enum Role: WireEnum {
         }
     }
 }
+
+extension Role {
+    /// The roles this build recognises, for a CLI to offer and to name in an error.
+    public static let known: [Role] = [.member, .admin]
+}

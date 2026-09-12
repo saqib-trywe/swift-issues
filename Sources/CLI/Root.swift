@@ -25,6 +25,7 @@ struct Root: AsyncParsableCommand {
             LabelCommand.self,
             UserCommand.self,
             ConfigCommand.self,
+            CompletionCommand.self,
         ]
     )
 

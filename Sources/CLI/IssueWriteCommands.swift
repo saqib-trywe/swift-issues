@@ -27,13 +27,19 @@ struct IssueFieldOptions: ParsableArguments {
     @Flag(help: "Do not open $EDITOR for the description.")
     var noEdit = false
 
-    @Option(help: "Status: \(Status.known.map(\.wireValue).joined(separator: ", ")).")
+    @Option(
+        help: "Status: \(Status.known.map(\.wireValue).joined(separator: ", ")).",
+        completion: .list(Status.known.map(\.wireValue)))
     var status: String?
 
-    @Option(help: "Priority: \(Priority.known.map(\.wireValue).joined(separator: ", ")).")
+    @Option(
+        help: "Priority: \(Priority.known.map(\.wireValue).joined(separator: ", ")).",
+        completion: .list(Priority.known.map(\.wireValue)))
     var priority: String?
 
-    @Option(help: "Assignee: 'me', an email address, or a user id.")
+    @Option(
+        help: "Assignee: 'me', an email address, or a user id.",
+        completion: .list(["me"]))
     var assignee: String?
 
     @Option(help: "Due date, as YYYY-MM-DD.")
@@ -393,7 +399,9 @@ extension IssueCommand {
         @Argument(help: "An issue key like PROJ-142, or an issue id.")
         var issue: String
 
-        @Option(help: "'me', 'none', an email address, or a user id.")
+        @Option(
+            help: "'me', 'none', an email address, or a user id.",
+            completion: .list(["me", "none"]))
         var to: String
 
         @OptionGroup var output: OutputOptions

@@ -23,7 +23,9 @@ struct ConfigCommand: AsyncParsableCommand {
                 "Resolved, so this shows what a command would actually use, including any environment override."
         )
 
-        @Argument(help: "One of: \(ConfigCommand.settableKeys.joined(separator: ", ")).")
+        @Argument(
+            help: "One of: \(ConfigCommand.settableKeys.joined(separator: ", ")).",
+            completion: .list(ConfigCommand.settableKeys))
         var key: String
 
         func run() async throws {
@@ -50,7 +52,9 @@ struct ConfigCommand: AsyncParsableCommand {
     struct Set: AsyncParsableCommand {
         static let configuration = CommandConfiguration(abstract: "Write a setting to the config file.")
 
-        @Argument(help: "One of: \(ConfigCommand.settableKeys.joined(separator: ", ")).")
+        @Argument(
+            help: "One of: \(ConfigCommand.settableKeys.joined(separator: ", ")).",
+            completion: .list(ConfigCommand.settableKeys))
         var key: String
 
         @Argument(help: "The value to store.")

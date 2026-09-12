@@ -331,6 +331,18 @@ Needed a server slice first: `GET/POST /api/v1/auth/tokens`, `DELETE /api/v1/aut
 
 **Prompts moved to stderr.** Found by `TOKEN=$(issues auth token create -q)` capturing `"Password: "` along with the token. Every prompt, hidden-password newline and destructive confirmation now goes to stderr, so stdout is exactly what the caller asked for. There is a dedicated suite holding that line.
 
+### Shell completions
+
+**811 tests.** `issues completion zsh|bash|fish`, which finishes ticket 11's table.
+
+ArgumentParser generates the script from the command surface itself, so completions cannot drift from the commands the way a hand-written script would. The command wraps the built-in `--generate-completion-script`, because nobody guesses a flag.
+
+What is worth testing here is not the generator but that our surface produces a script each shell will actually load — **a broken completion script is worse than none, because it errors on every shell start-up**. So each script is run through its own shell's parser (`zsh -n`, `bash -n`, `fish --no-execute`), and both zsh and bash were additionally verified to *register* the completion when sourced.
+
+- **`--status`, `--priority`, `--kind`, `--role`, `--sort`, `--assignee` and config keys carry completion lists.** That is the actual value: `inProgress` and `agentReadonly` are the spellings nobody remembers.
+- **No dynamic completion** of project keys, issue keys or label names. Those would need a network call on every Tab, in a tool whose appeal is being fast, and would fail confusingly offline.
+- **fish is skipped, not failed, when absent** — a red suite for a missing shell teaches people to ignore red suites. It is therefore **unverified on this machine and in CI**, since neither has fish installed.
+
 ### Open gaps
 
 - **`expand` is not implemented server-side.** Ticket 06 specifies it and `Expansion` exists in Core, but no route reads the parameter. The CLI resolves assignee names with a second request instead; a list view in the apps will want the real thing.
@@ -352,8 +364,10 @@ Needed a server slice first: `GET/POST /api/v1/auth/tokens`, `DELETE /api/v1/aut
 
 ### Next
 
-1. **`issues completion`** for zsh/bash/fish — the last item in ticket 11's table. ArgumentParser generates these, so it is mostly wiring plus a test that each shell's script is syntactically valid.
-2. **`expand`** server-side, so list views stop costing a second request for assignee names.
-3. Then the **native apps** (ticket 10, variant C), and **MCP** last. MCP now has what it needs: agent tokens are mintable and their authority is fixed and narrower than their owner's.
+**The CLI is complete against ticket 11.** Four surfaces remain from the five in scope.
 
-**The CLI's command surface is otherwise complete** against ticket 11.
+1. **`expand`** server-side (ticket 06), so list views stop costing a second request for assignee names. Small, and the apps will want it.
+2. The **native apps** — ticket 10, variant C. The biggest remaining piece by far: a separate Xcode workspace, GRDB replica, the offline queue, and the sync loop the server has been built for.
+3. **MCP** last. It has what it needs now: agent tokens are mintable, and an agent's authority is fixed and narrower than its owner's.
+
+Before the apps, worth a deliberate pass: **the sync protocol has never been exercised by a real client.** The server's push and pull are tested from `ServerTests`, but nothing has yet held a replica, queued writes offline, and reconciled. A throwaway harness that does exactly that — no UI — would find protocol problems while they are still cheap.

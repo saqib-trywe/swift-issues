@@ -98,7 +98,9 @@ struct UserCommand: AsyncParsableCommand {
         @Option(name: [.short, .long], help: "Display name. Defaults to the email address.")
         var name: String?
 
-        @Option(help: "Role: member or admin.")
+        @Option(
+            help: "Role: member or admin.",
+            completion: .list(Role.known.map(\.wireValue)))
         var role: String = "member"
 
         @Flag(help: "Prompt for an initial password.")
