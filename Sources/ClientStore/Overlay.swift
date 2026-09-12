@@ -33,6 +33,20 @@ public struct Overlaid<Record: Sendable>: Sendable {
     public var hasUnsentChanges: Bool {
         !dirty.isEmpty || isUnsentCreate || isUnsentDelete
     }
+
+    public init(
+        record: Record,
+        dirty: Set<IssueField> = [],
+        isUnsentCreate: Bool = false,
+        isUnsentDelete: Bool = false,
+        isQuarantined: Bool = false
+    ) {
+        self.record = record
+        self.dirty = dirty
+        self.isUnsentCreate = isUnsentCreate
+        self.isUnsentDelete = isUnsentDelete
+        self.isQuarantined = isQuarantined
+    }
 }
 
 extension ReplicaDatabase {

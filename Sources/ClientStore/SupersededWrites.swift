@@ -21,6 +21,20 @@ public struct SupersededRecord: Sendable {
     public let current: SyncRecord?
     public let reason: SupersededReason
     public let occurredAt: Date
+
+    public init(
+        opId: UUID,
+        operation: SyncOperation,
+        current: SyncRecord?,
+        reason: SupersededReason,
+        occurredAt: Date
+    ) {
+        self.opId = opId
+        self.operation = operation
+        self.current = current
+        self.reason = reason
+        self.occurredAt = occurredAt
+    }
 }
 
 extension ReplicaDatabase {

@@ -24,6 +24,20 @@ public struct PendingOperation: Sendable {
     public let state: PendingState
     public let problem: Problem?
     public let attemptCount: Int
+
+    public init(
+        sequence: Int64,
+        operation: SyncOperation,
+        state: PendingState,
+        problem: Problem?,
+        attemptCount: Int
+    ) {
+        self.sequence = sequence
+        self.operation = operation
+        self.state = state
+        self.problem = problem
+        self.attemptCount = attemptCount
+    }
 }
 
 extension ReplicaDatabase {

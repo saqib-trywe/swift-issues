@@ -10,8 +10,11 @@ let package = Package(
         .library(name: "Core", targets: ["Core"]),
         .library(name: "ClientStore", targets: ["ClientStore"]),
         .library(name: "AppCore", targets: ["AppCore"]),
+        .library(name: "AppViews", targets: ["AppViews"]),
         .executable(name: "issues-server", targets: ["issues-server"]),
         .executable(name: "issues", targets: ["issues-cli"]),
+        // A throwaway gallery for looking at the shared components. Not shipped.
+        .executable(name: "issues-preview", targets: ["issues-preview"]),
     ],
     dependencies: [
         // ADR 0009: the only candidate both stable and structured-concurrency
@@ -83,6 +86,24 @@ let package = Package(
             dependencies: ["Core", "ClientStore"],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
+        // The shared SwiftUI components. A separate target from `AppCore` because
+        // ticket 13 gates view models and exempts view bodies: anything that can be
+        // wrong lives in `AppCore` where it is tested, leaving these with nothing
+        // to decide. Keeping them together would drag the gated figure down to
+        // whatever fraction of the code happens to be views.
+        .target(
+            name: "AppViews",
+            dependencies: ["AppCore", "Core", "ClientStore"],
+            swiftSettings: [.swiftLanguageMode(.v6)]
+        ),
+        // Renders every shared component with every sync state, so the views can be
+        // looked at before the app shells exist. The successor to ticket 10's HTML
+        // prototype, and just as throwaway.
+        .executableTarget(
+            name: "issues-preview",
+            dependencies: ["AppViews", "AppCore", "Core", "ClientStore", "TestSupport"],
+            swiftSettings: [.swiftLanguageMode(.v6)]
+        ),
         // Entity builders. Linked only by test targets, never shipped. Ticket 13.
         .target(
             name: "TestSupport",
@@ -119,7 +140,7 @@ let package = Package(
         ),
         .testTarget(
             name: "AppCoreTests",
-            dependencies: ["AppCore", "Core", "ClientStore", "TestSupport"],
+            dependencies: ["AppViews", "AppCore", "Core", "ClientStore", "TestSupport"],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
         .testTarget(

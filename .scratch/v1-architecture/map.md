@@ -470,9 +470,30 @@ The advisory check had no implementation anywhere. It is the **only** place a us
 
 Also here: the `unknown`-enum read-only rule (a picker would let a user clobber a value this build cannot represent), the no-key-until-first-sync state, and a deleted comment keeping its place in a thread.
 
+### The apps: shared components, and a way to look at them
+
+**1,052 tests. AppCore 97.36%.** Atoms, `IssueRowContent` and `SyncStatusView` — all five sync surfaces in one implementation.
+
+**`AppViews` is a separate target from `AppCore`, and that split is the point.** Ticket 13 gates view models and exempts view bodies; with the views in `AppCore` the figure fell to **57%**, which would have meant either gating untestable bodies or abandoning the gate on the models. Split, anything that can be wrong lives in `AppCore` where it is tested, and the bodies are left with nothing to decide — colours come from a named `Emphasis`, copy and symbols from `SyncSurface`, the key placeholder from `IssueKeyPresentation`.
+
+**`issues-preview`** renders every component with every sync state at once — the successor to ticket 10's HTML prototype, and just as throwaway. Screenshot: [../preview/gallery.png](../preview/gallery.png).
+
+It immediately earned itself: **rows without a dirty dot did not line up with rows that had one**, because a hidden indicator collapses the `HStack` and shifts every title left. A list whose titles jitter as items sync is exactly the class of fault no unit test would have caught. Both state indicators now reserve their space.
+
+| Decision | Why |
+| --- | --- |
+| A due date renders anchored at **midday GMT, formatted in GMT** | A calendar day through an ordinary formatter shifts: 1 January in London reads as 31 December further west, so a task due on the first looks overdue. Midday rather than midnight so no daylight-saving transition can move the day either |
+| An unrecognised status or priority is shown **verbatim** | It came from the server and the user may well know what it means. It gets no colour implying a category it does not have |
+| A **human** record carries no `via` badge | Marking the common case would bury the uncommon one, and the point of `via` is spotting what the bot filed |
+| Buttons are named for the action — "Recover text", not "View" | The user should know what happens before pressing |
+| An unparseable label colour falls back to grey | The server validates the format, but an older record must not crash a list over a swatch |
+
+Copy is asserted, not just written: the lost-to-deletion surface must say "deleted" and must **not** say "someone else edited this field" — which cannot happen under receipt-time last-write-wins — and **no surface may imply freshness**, since iOS background refresh has no timing guarantee and "updated 2 minutes ago" becomes a lie the moment a refresh is missed.
+
 ### Open gaps
 
 - **Four unreachable defensive lines in Core are uncovered**, which is why the baseline moved from 99.29% to 99.07%: three `default: nil` folds that a per-entity slot can never reach, and the cycle fallback in the topological sort, which this domain cannot produce. The fallback emits the queue head rather than stopping, because silently dropping operations is the one outcome ADR 0004 forbids.
+- **The `via` badge may be too subtle.** Ticket 12 wants attribution legible "at a glance"; it is currently a small secondary-tinted glyph. Visible in the gallery screenshot — worth a look before the app shells fix the layout around it.
 - **The server's SQLite files are `0644` inside a `0700` directory.** Protection is directory-level by design, but a file moved or copied out of it carries no protection of its own. Worth a `chmod` after open.
 - **`.issues.toml` may not set `url`** — a repository-controlled file that could retarget the CLI at another host would make `git clone` enough to redirect traffic. Refused explicitly, and tested.
 
@@ -491,6 +512,6 @@ Also here: the `unknown`-enum read-only rule (a picker would let a user clobber 
 
 ### Next
 
-1. **The shared SwiftUI components** — `IssueRowContent`, `SyncStatusView`, `IssueKeyLabel` and the atoms. They compile-check but do not render, so their correctness rests on review; the models beneath them are already gated.
-2. **The app shells**: an Xcode project with the macOS composition (`NavigationSplitView`, sortable `Table`, keyboard-first, plus the Mac-only token and session administration) and the iPhone/iPad ones. This is the first work that cannot be verified from `swift test`.
+1. **`IssueDetailContent`** — field stack, read-only states for unrecognised enum values, and the comment thread. The last shared component.
+2. **The app shells**: an Xcode project with the macOS composition (`NavigationSplitView`, sortable `Table`, keyboard-first, plus the Mac-only token and session administration) and the iPhone/iPad ones.
 3. **MCP** last.
