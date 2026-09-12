@@ -645,3 +645,128 @@ struct SyncRecoveryTests {
         }
     }
 }
+
+/// The overlay and the sync loop together, which is what the UI will actually
+/// experience.
+@Suite("Overlay through a real sync")
+struct OverlayThroughSyncTests {
+
+    /// The property that matters most: what the user sees never flickers. Their
+    /// edit is visible the moment they make it, and still visible after it syncs.
+    @Test("an edit stays visible from typing through to acknowledgement")
+    func editStaysVisibleThroughout() async throws {
+        try await withSync { world in
+            let issue = try IssueRepository(database: world.database).create(
+                Core.Issue.fixture(
+                    key: nil, projectId: world.project.id, title: "Server title",
+                    reporterId: world.owner.id))
+
+            let device = try world.device()
+            _ = try await device.engine.pull()
+            #expect(try device.database.issue(issue.id)?.record.title == "Server title")
+
+            var patch = IssuePatch()
+            patch.title = .set("My edit")
+            try device.database.enqueue(
+                .patchIssue(opId: UUID(), id: issue.id, at: Date(), body: patch))
+
+            // Visible immediately, and marked as not yet sent.
+            let pending = try #require(try device.database.issue(issue.id))
+            #expect(pending.record.title == "My edit")
+            #expect(pending.dirty == [.title])
+
+            _ = try await device.engine.sync()
+
+            // Still visible, and no longer marked.
+            let settled = try #require(try device.database.issue(issue.id))
+            #expect(settled.record.title == "My edit")
+            #expect(!settled.hasUnsentChanges)
+            #expect(try world.serverIssue(issue.id)?.title == "My edit")
+        }
+    }
+
+    /// A pull arriving mid-edit must not wipe what the user is typing — the base
+    /// moves underneath, the overlay keeps their text on top.
+    @Test("a pull does not disturb an unsent edit")
+    func pullDoesNotDisturbAnUnsentEdit() async throws {
+        try await withSync { world in
+            let repository = IssueRepository(database: world.database)
+            let issue = try repository.create(
+                Core.Issue.fixture(
+                    key: nil, projectId: world.project.id, title: "Original",
+                    reporterId: world.owner.id))
+
+            let device = try world.device()
+            _ = try await device.engine.pull()
+
+            var mine = IssuePatch()
+            mine.title = .set("Mine, unsent")
+            try device.database.enqueue(
+                .patchIssue(opId: UUID(), id: issue.id, at: Date(), body: mine))
+
+            // Somebody else changes a different field, and it arrives.
+            var theirs = IssuePatch()
+            theirs.priority = .set(.urgent)
+            _ = try repository.apply(theirs, to: issue.id, at: Date())
+            _ = try await device.engine.pull()
+
+            let overlaid = try #require(try device.database.issue(issue.id))
+            #expect(overlaid.record.title == "Mine, unsent", "a pull wiped an unsent edit")
+            #expect(overlaid.record.priority == .urgent, "the other device's change was lost")
+            #expect(overlaid.dirty == [.title])
+        }
+    }
+
+    /// A create made offline has to survive the round trip and pick up the Issue
+    /// Key the server assigns, without ever disappearing from the list.
+    @Test("an offline create keeps its place and gains its key")
+    func offlineCreateKeepsItsPlaceAndGainsItsKey() async throws {
+        try await withSync { world in
+            let device = try world.device()
+            let id = Core.Issue.ID()
+            try device.database.enqueue(
+                .putIssue(
+                    opId: UUID(), id: id, at: Date(),
+                    body: IssueCreate(projectId: world.project.id, title: "Made on a plane")))
+
+            let before = try #require(try device.database.issue(id))
+            #expect(before.isUnsentCreate)
+            #expect(before.record.key == nil)
+
+            _ = try await device.engine.sync()
+
+            let after = try #require(try device.database.issue(id))
+            #expect(!after.hasUnsentChanges)
+            #expect(after.record.key != nil, "the server-assigned key never reached the replica")
+            #expect(after.record.reporterId == world.owner.id, "the placeholder reporter survived")
+            #expect(try device.database.issues(in: world.project.id).count == 1)
+        }
+    }
+
+    /// A rejected write stays on screen with its text intact, so the user can see
+    /// what needs fixing rather than finding their work gone.
+    @Test("a rejected edit stays visible and flagged after a sync")
+    func rejectedEditStaysVisibleAndFlagged() async throws {
+        try await withSync { world in
+            let issue = try IssueRepository(database: world.database).create(
+                Core.Issue.fixture(
+                    key: nil, projectId: world.project.id, title: "Fine",
+                    reporterId: world.owner.id))
+
+            let device = try world.device()
+            _ = try await device.engine.pull()
+
+            var patch = IssuePatch()
+            patch.title = .set(String(repeating: "a", count: 600))
+            try device.database.enqueue(
+                .patchIssue(opId: UUID(), id: issue.id, at: Date(), body: patch))
+
+            _ = try await device.engine.sync()
+
+            let overlaid = try #require(try device.database.issue(issue.id))
+            #expect(overlaid.isQuarantined)
+            #expect(overlaid.record.title.count == 600, "the user's text was thrown away")
+            #expect(try world.serverIssue(issue.id)?.title == "Fine")
+        }
+    }
+}

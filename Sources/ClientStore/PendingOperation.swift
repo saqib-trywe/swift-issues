@@ -12,8 +12,11 @@ public enum PendingState: String, Codable, Hashable, Sendable {
 }
 
 /// One row of the offline queue.
-public struct PendingOperation: Sendable, Hashable, Identifiable {
-    public var id: UUID { operation.opId }
+///
+/// Deliberately not `Identifiable` or `Hashable`: nothing needs either yet, and a
+/// hand-written `hash` that no test exercises is a liability rather than a
+/// convenience. Both are two lines to add when a view actually wants them.
+public struct PendingOperation: Sendable {
     /// Queue position. Independent of the clock, so operations made in the same
     /// millisecond still have a defined order.
     public let sequence: Int64
@@ -21,16 +24,6 @@ public struct PendingOperation: Sendable, Hashable, Identifiable {
     public let state: PendingState
     public let problem: Problem?
     public let attemptCount: Int
-
-    public static func == (lhs: PendingOperation, rhs: PendingOperation) -> Bool {
-        lhs.sequence == rhs.sequence && lhs.operation.opId == rhs.operation.opId
-            && lhs.state == rhs.state && lhs.attemptCount == rhs.attemptCount
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(sequence)
-        hasher.combine(operation.opId)
-    }
 }
 
 extension ReplicaDatabase {
@@ -43,7 +36,7 @@ extension ReplicaDatabase {
     /// nothing can tell.
     public func enqueue(_ operation: SyncOperation, at now: Date = Date()) throws {
         try writer.write { db in
-            try Self.applyLocally(operation, in: db, at: now)
+            try Self.applyProvisionally(operation, in: db, at: now)
             try Self.insert(operation, in: db, at: now)
         }
     }
@@ -105,8 +98,32 @@ extension ReplicaDatabase {
         }
     }
 
-    /// Removes an operation the server accepted.
-    public func acknowledge(_ opId: UUID) throws {
+    /// Applies an accepted operation to the base tables and removes it from the
+    /// queue, in one transaction.
+    ///
+    /// Applying here rather than at enqueue is what keeps the base
+    /// server-authoritative. Doing both in one write matters: an operation removed
+    /// from the queue but not applied would leave the replica stale with nothing
+    /// left to replay it.
+    public func acknowledge(_ opId: UUID, at now: Date = Date()) throws {
+        try writer.write { db in
+            let row = try Row.fetchOne(
+                db, sql: "SELECT * FROM pending_operation WHERE op_id = ?",
+                arguments: [opId.uuidString])
+            if let pending = row.flatMap(Self.pending(from:)) {
+                try Self.applyConfirmed(pending.operation, in: db, at: now)
+            }
+            try db.execute(
+                sql: "DELETE FROM pending_operation WHERE op_id = ?",
+                arguments: [opId.uuidString])
+        }
+    }
+
+    /// Removes an operation without applying it.
+    ///
+    /// For a superseded write, and for a quarantined one the user chooses to throw
+    /// away: in both cases the local change must *not* reach the base tables.
+    public func discard(_ opId: UUID) throws {
         try writer.write { db in
             try db.execute(
                 sql: "DELETE FROM pending_operation WHERE op_id = ?",

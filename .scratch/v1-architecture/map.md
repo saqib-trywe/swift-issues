@@ -385,6 +385,30 @@ Started on the client engine rather than a throwaway harness: ticket 05 and ADR 
 
 Proven end to end: a write on one device reaching another, and **concurrent edits to different fields both surviving** — the per-field last-write-wins claim the whole architecture rests on.
 
+### The read-time overlay, and a correction to the store
+
+**944 tests. ClientStore 99.53%.** This completes ticket 05.
+
+Building the overlay exposed a tension in what the store did the day before: `enqueue` wrote changes straight into the base tables, so the base was not server-authoritative and ticket 05's "base plus pending applied on read" would double-count. **Resolved by moving application to acknowledgement time**:
+
+- A **create** still writes a provisional row, because there is no server record to overlay onto and without a row a list would have to merge unsent creates in Swift rather than SQL.
+- A **patch or delete** touches nothing until the server accepts it. That is what makes discarding a quarantined operation revert cleanly — previously the rejected value was baked into the row and survived until the next pull — and what stops a rejected delete leaving the replica claiming a deletion that never happened.
+- `acknowledge` now **applies and dequeues in one transaction**. An operation removed but not applied would leave the replica stale with nothing left to replay it.
+- `discard` is separate, for superseded writes and for a quarantined one the user throws away: in both cases the change must *not* reach the base.
+
+**A real bug caught by its test.** A locally created issue inserted `reporter_id = ''`, which is not a parseable UUID, so the row was skipped on read — an issue made offline would have been **invisible until it synced**. Now a named zero-UUID placeholder, replaced by the first authoritative record.
+
+| Decision | Why |
+| --- | --- |
+| A **quarantined** operation still overlays, flagged | The user typed that text and it is theirs to repair. Hiding it would make a rejection look like their work had been thrown away |
+| Dirty state is **per field** | Ticket 05's stated reason for keeping the queue as the record of what is locally changed: conflict presentation needs to mark individual values |
+| The base row for a **local delete** is untouched | A rejected delete then needs nothing undone |
+| Pending operations for a page are fetched in **one query** | A list of fifty issues would otherwise be fifty-one |
+
+Proven through the real sync loop: an edit stays visible from typing through to acknowledgement without flickering; **a pull arriving mid-edit does not wipe unsent text** while still delivering somebody else's change to another field; an offline create keeps its place in the list and gains its server-assigned key; and a rejected edit stays on screen, flagged, with its text intact.
+
+`PendingOperation` lost its `Identifiable` and `Hashable` conformances — nothing used them, and a hand-written `hash` no test exercises is a liability.
+
 ### Open gaps
 
 - **`expand` is not implemented server-side.** Ticket 06 specifies it and `Expansion` exists in Core, but no route reads the parameter. The CLI resolves assignee names with a second request instead; a list view in the apps will want the real thing.
@@ -407,7 +431,9 @@ Proven end to end: a write on one device reaching another, and **concurrent edit
 
 ### Next
 
-1. **The read-time overlay** — base record plus pending operations applied on read, and "which fields are dirty", which the UI needs for conflict presentation. The last piece of ticket 05 still unbuilt.
-2. **Surfacing superseded writes**: the engine returns them, but nothing stores them for the user to recover from after the fact.
-3. **`expand`** server-side (ticket 06), so list views stop costing a second request.
-4. Then the **apps** (ticket 10, variant C), and **MCP** last.
+**Ticket 05 is complete.** The client engine holds a replica, queues writes offline, reconciles, and shows unsent work per field.
+
+1. **Surfacing superseded writes** — the engine returns them, but nothing persists them for a user to recover from after the fact. Small, and the last loose end in the engine.
+2. **`expand`** server-side (ticket 06), so list views stop costing a second request.
+3. Then the **apps** (ticket 10, variant C): a separate Xcode workspace over `ClientStore`, with `ValueObservation` wrapped in an `@Observable` type. The sync protocol is now proven, so what is left there is genuinely UI work.
+4. **MCP** last.

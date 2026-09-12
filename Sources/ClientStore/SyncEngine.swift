@@ -113,7 +113,9 @@ public actor SyncEngine {
                 // nothing left to retry against. Leaving it pending would produce an
                 // operation that fails forever (ticket 05).
                 guard let operation = byId[result.opId] else { continue }
-                try database.acknowledge(result.opId)
+                // Discarded, not acknowledged: the write never happened, so it must
+                // not reach the base tables.
+                try database.discard(result.opId)
                 summary.superseded.append(
                     SupersededWrite(
                         opId: result.opId, operation: operation, current: result.current))

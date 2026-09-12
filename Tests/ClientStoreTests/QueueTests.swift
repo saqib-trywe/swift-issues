@@ -73,6 +73,8 @@ struct QueueTests {
 
     // MARK: Local application
 
+    /// A patch reaches the base tables only once the server accepts it, so this
+    /// asserts through the overlay first and the base afterwards.
     @Test("a patch touches only the fields it names")
     func patchTouchesOnlyNamedFields() throws {
         let database = try ReplicaDatabase.inMemory()
@@ -85,14 +87,11 @@ struct QueueTests {
         try database.enqueue(
             .patchIssue(opId: UUID(), id: id, at: Date(), body: titlePatch("Renamed")))
 
-        let row = try database.reader.read { db in
-            try Row.fetchOne(
-                db, sql: "SELECT * FROM issue WHERE id = ?", arguments: [id.rawValue.uuidString])
-        }
-        let stored = try #require(row)
-        #expect(stored["title"] == "Renamed")
-        #expect(stored["description"] == "Untouched")
-        #expect(stored["priority"] == "high")
+        let overlaid = try #require(try database.issue(id))
+        #expect(overlaid.record.title == "Renamed")
+        #expect(overlaid.record.description == "Untouched")
+        #expect(overlaid.record.priority == .high)
+        #expect(overlaid.dirty == [.title])
     }
 
     @Test("clearing a field clears it locally")
@@ -107,30 +106,37 @@ struct QueueTests {
         patch.assigneeId = .cleared
         try database.enqueue(.patchIssue(opId: UUID(), id: id, at: Date(), body: patch))
 
-        let assignee = try database.reader.read { db in
-            try String.fetchOne(
-                db, sql: "SELECT assignee_id FROM issue WHERE id = ?",
-                arguments: [id.rawValue.uuidString])
-        }
-        #expect(assignee == nil)
+        #expect(try database.issue(id)?.record.assigneeId == nil)
     }
 
-    /// A tombstone is kept indefinitely: a client that forgot one would resurrect
-    /// the record on its next pull.
-    @Test("a delete tombstones rather than removing the row")
-    func deleteTombstonesRatherThanRemoving() throws {
+    /// A local delete is carried by the queue until the server agrees, so a
+    /// rejected delete needs nothing undone. Once acknowledged it tombstones, and
+    /// the tombstone is kept indefinitely — a client that forgot one would
+    /// resurrect the record on its next pull.
+    @Test("a delete tombstones only once the server accepts it")
+    func deleteTombstonesOnceAccepted() throws {
         let database = try ReplicaDatabase.inMemory()
         let id = DomainIssue.ID()
 
         try database.enqueue(.putIssue(opId: UUID(), id: id, at: Date(), body: create()))
-        try database.enqueue(.deleteIssue(opId: UUID(), id: id, at: Date()))
+        let deletion = SyncOperation.deleteIssue(opId: UUID(), id: id, at: Date())
+        try database.enqueue(deletion)
 
-        let row = try database.reader.read { db in
-            try Row.fetchOne(
-                db, sql: "SELECT * FROM issue WHERE id = ?", arguments: [id.rawValue.uuidString])
+        #expect(try database.issue(id)?.isUnsentDelete == true)
+        let beforeAck = try database.reader.read { db in
+            try Date.fetchOne(
+                db, sql: "SELECT deleted_at FROM issue WHERE id = ?",
+                arguments: [id.rawValue.uuidString])
         }
-        let stored = try #require(row)
-        #expect(stored["deleted_at"] != nil)
+        #expect(beforeAck == nil)
+
+        try database.acknowledge(deletion.opId)
+        let afterAck = try database.reader.read { db in
+            try Date.fetchOne(
+                db, sql: "SELECT deleted_at FROM issue WHERE id = ?",
+                arguments: [id.rawValue.uuidString])
+        }
+        #expect(afterAck != nil)
     }
 
     /// A deleted comment still occupies its place in a thread, so the body is
@@ -144,7 +150,9 @@ struct QueueTests {
             .putComment(
                 opId: UUID(), id: id, at: Date(),
                 body: CommentCreate(issueId: DomainIssue.ID(), body: "Said something")))
-        try database.enqueue(.deleteComment(opId: UUID(), id: id, at: Date()))
+        let deletion = SyncOperation.deleteComment(opId: UUID(), id: id, at: Date())
+        try database.enqueue(deletion)
+        try database.acknowledge(deletion.opId)
 
         let row = try database.reader.read { db in
             try Row.fetchOne(
@@ -406,7 +414,9 @@ struct LocalApplyTests {
 
         var patch = CommentPatch()
         patch.body = .set("Second go")
-        try database.enqueue(.patchComment(opId: UUID(), id: id, at: Date(), body: patch))
+        let edit = SyncOperation.patchComment(opId: UUID(), id: id, at: Date(), body: patch)
+        try database.enqueue(edit)
+        try database.acknowledge(edit.opId)
 
         let body = try database.reader.read { db in
             try String.fetchOne(
@@ -445,11 +455,16 @@ struct LocalApplyTests {
 
         var colourOnly = LabelPatch()
         colourOnly.color = .set("#123ABC")
-        try database.enqueue(.patchLabel(opId: UUID(), id: id, at: Date(), body: colourOnly))
+        let colourEdit = SyncOperation.patchLabel(
+            opId: UUID(), id: id, at: Date(), body: colourOnly)
+        try database.enqueue(colourEdit)
+        try database.acknowledge(colourEdit.opId)
 
         var nameOnly = LabelPatch()
         nameOnly.name = .set("defect")
-        try database.enqueue(.patchLabel(opId: UUID(), id: id, at: Date(), body: nameOnly))
+        let nameEdit = SyncOperation.patchLabel(opId: UUID(), id: id, at: Date(), body: nameOnly)
+        try database.enqueue(nameEdit)
+        try database.acknowledge(nameEdit.opId)
 
         let row = try database.reader.read { db in
             try Row.fetchOne(
@@ -468,7 +483,9 @@ struct LocalApplyTests {
             .putLabel(
                 opId: UUID(), id: id, at: Date(),
                 body: LabelCreate(name: "bug", color: "#2D6CDF")))
-        try database.enqueue(.deleteLabel(opId: UUID(), id: id, at: Date()))
+        let deletion = SyncOperation.deleteLabel(opId: UUID(), id: id, at: Date())
+        try database.enqueue(deletion)
+        try database.acknowledge(deletion.opId)
 
         let deletedAt = try database.reader.read { db in
             try Date.fetchOne(
@@ -489,7 +506,9 @@ struct LocalApplyTests {
 
         try database.enqueue(
             .addLabel(opId: UUID(), id: membership, at: Date(), issueId: issue, labelId: label))
-        try database.enqueue(.removeLabel(opId: UUID(), id: membership, at: Date()))
+        let removal = SyncOperation.removeLabel(opId: UUID(), id: membership, at: Date())
+        try database.enqueue(removal)
+        try database.acknowledge(removal.opId)
 
         let removed = try database.reader.read { db in
             try Date.fetchOne(db, sql: "SELECT deleted_at FROM issue_label")
