@@ -8,6 +8,8 @@ import Hummingbird
 /// author permanently, so removal would orphan history. Deactivation is a patch.
 struct UserRoutes: Sendable {
     let database: AppDatabase
+    /// Production parameters by default; tests inject cheap ones.
+    var hasher: PasswordHasher = .production
 
     var repository: UserRepository { UserRepository(database: database) }
 
@@ -66,6 +68,51 @@ struct UserRoutes: Sendable {
                 active: true, createdAt: now, updatedAt: now)
             try repository.save(user)
             return try EditedResponse(status: .created, response: user)
+        }
+
+        group.put("/users/:id/password") { request, context in
+            // An agent may never set a password — not even its own owner's. That is
+            // account control rather than tracker work, and ADR 0007 keeps an agent
+            // narrower than its owner. Checked as a kind rather than through
+            // `.administer`, which would also lock out a Member changing their own.
+            guard context.identity.kind == .human else {
+                throw ProblemError.forbidden(
+                    detail: "An agent token may not set a password.")
+            }
+            let id = try context.userID()
+            guard try repository.find(id) != nil else {
+                throw ProblemError.notFound(detail: "No such user.")
+            }
+            let body = try await request.decode(as: PasswordChange.self, context: context)
+
+            let failures = Validation.password(body.password)
+            guard failures.isEmpty else { throw ProblemError.invalid(failures) }
+
+            let caller = context.identity
+            let isAdmin = caller.kind == .human && caller.role == .admin
+
+            if caller.userId == id {
+                // Your own password always needs the current one, Admin or not: a
+                // hijacked session would otherwise be enough to lock the real owner
+                // out of their own account permanently.
+                guard let current = body.currentPassword,
+                    let stored = try repository.credentials(forId: id),
+                    try PasswordHasher.verify(current, against: stored)
+                else {
+                    throw ProblemError.forbidden(detail: "The current password is not correct.")
+                }
+            } else {
+                guard isAdmin else {
+                    throw ProblemError.forbidden(detail: "Only an Admin may set another user's password.")
+                }
+            }
+
+            try repository.setPassword(try hasher.hash(body.password), for: id)
+            // A changed password must end the sessions it was protecting, or
+            // changing it does nothing about whoever you changed it because of.
+            try SessionRepository(database: database).revokeAll(for: id)
+
+            return HTTPResponse.Status.noContent
         }
 
         group.patch("/users/:id") { request, context in

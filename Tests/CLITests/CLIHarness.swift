@@ -136,6 +136,16 @@ struct CLIWorld: Sendable {
         return CapturedOutput(code: code, standardOutput: out.text, standardError: error.text)
     }
 
+    /// Authenticates as an ordinary Member, for the Admin-only rejections.
+    func authenticateAsMember() throws {
+        let member = User.fixture(
+            email: "member@example.com", displayName: "Mel", role: .member)
+        try UserRepository(database: database).save(member)
+        let session = try SessionRepository(database: database).create(
+            for: member.id, kind: .human, deviceId: nil, label: "cli tests")
+        try credentials.store(session.raw, forServer: "https://issues.example.test")
+    }
+
     /// Stores a working token, so tests of authenticated commands do not each
     /// have to log in first.
     func authenticate() throws {

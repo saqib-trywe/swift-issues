@@ -20,6 +20,23 @@ public struct UserPatch: Codable, Sendable {
     public init() {}
 }
 
+/// A password change.
+///
+/// Deliberately not part of `UserCreate`: a `PUT` create is retried after a lost
+/// response by design, and a password in a retried body is one more place it can
+/// be logged or replayed.
+public struct PasswordChange: Codable, Sendable {
+    public var password: String
+    /// Required when changing your own password, ignored when an Admin resets
+    /// somebody else's — they cannot know it.
+    public var currentPassword: String?
+
+    public init(password: String, currentPassword: String? = nil) {
+        self.password = password
+        self.currentPassword = currentPassword
+    }
+}
+
 /// What a server reports about itself.
 ///
 /// Exists so a lagging client can detect version skew and warn clearly rather
@@ -59,6 +76,15 @@ public enum UserEndpoints {
     public static func create(id: User.ID, _ body: UserCreate) throws -> HTTPRequest {
         HTTPRequest(
             method: "PUT", path: "\(base)/\(id.rawValue.uuidString)",
+            headers: ["Content-Type": "application/json"],
+            body: try JSONCoders.encoder.encode(body))
+    }
+
+    /// Sets a password. An Admin may set anyone's; anyone may set their own by
+    /// supplying the current one.
+    public static func setPassword(id: User.ID, _ body: PasswordChange) throws -> HTTPRequest {
+        HTTPRequest(
+            method: "PUT", path: "\(base)/\(id.rawValue.uuidString)/password",
             headers: ["Content-Type": "application/json"],
             body: try JSONCoders.encoder.encode(body))
     }

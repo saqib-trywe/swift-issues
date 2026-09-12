@@ -97,6 +97,17 @@ public struct UserRepository: Sendable {
         }
     }
 
+    /// The stored hash for a user, or `nil` if they have never been given a
+    /// password. Used to verify the *current* one before allowing a self-service
+    /// change.
+    func credentials(forId id: User.ID) throws -> String? {
+        try database.reader.read { db in
+            try String.fetchOne(
+                db, sql: "SELECT password_hash FROM user WHERE id = ?",
+                arguments: [id.rawValue.uuidString])
+        }
+    }
+
     static func user(from row: Row) throws -> User {
         guard let uuid = UUID(uuidString: row["id"]) else {
             throw DatabaseError(message: "Malformed user row: \(row)")

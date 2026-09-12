@@ -29,7 +29,7 @@ struct LabelRoutes: Sendable {
             let labelId = try context.id(Label.self, from: "labelId")
             let body = try await request.decode(as: LabelCreate.self, context: context)
 
-            let failures = Validation.labelName(body.name)
+            let failures = Validation.labelName(body.name) + Validation.labelColor(body.color)
             guard failures.isEmpty else { throw ProblemError.invalid(failures) }
 
             // The id must be the derived one. An invented id would let two clients
@@ -71,7 +71,11 @@ struct LabelRoutes: Sendable {
                 // creation-time device, and the id is opaque thereafter (ADR 0003).
                 label.name = name
             }
-            if case .set(let color) = patch.color { label.color = color }
+            if case .set(let color) = patch.color {
+                let failures = Validation.labelColor(color)
+                guard failures.isEmpty else { throw ProblemError.invalid(failures) }
+                label.color = color
+            }
             label.updatedAt = Date()
 
             return try EditedResponse(status: .ok, response: try repository.save(label))

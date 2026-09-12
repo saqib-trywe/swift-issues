@@ -45,3 +45,44 @@ public struct Label: Hashable, Sendable, Codable, Identifiable {
         return ID(UUIDv5.generate(namespace: projectId.rawValue, name: normalised))
     }
 }
+
+extension Label {
+
+    /// The colours a label gets when nobody picks one.
+    ///
+    /// Small and fixed so a tracker looks coherent rather than like a paint
+    /// catalogue, and so two labels are rarely near-identical shades.
+    public static let palette = [
+        "#2D6CDF",  // blue
+        "#B5341B",  // rust
+        "#1F7A4D",  // green
+        "#7A4DB5",  // violet
+        "#B58A1F",  // amber
+        "#1F7A7A",  // teal
+        "#B51F6C",  // magenta
+        "#4D5560",  // slate
+    ]
+
+    /// Picks a palette entry from the name.
+    ///
+    /// Derived rather than random so the same name always gets the same colour:
+    /// two people creating "bug" offline converge on one id (see `deriveID`), and
+    /// they must converge on one colour too, or the label would flicker between
+    /// two shades as their writes arrive.
+    public static func defaultColor(forName name: String) -> String {
+        palette[stableIndex(of: name)]
+    }
+
+    /// FNV-1a over the lowercased UTF-8 bytes.
+    ///
+    /// Swift's own `hashValue` is seeded per process, so using it here would give
+    /// a label a different colour every time the binary restarts.
+    public static func stableIndex(of name: String) -> Int {
+        var hash: UInt64 = 0xcbf2_9ce4_8422_2325
+        for byte in name.lowercased().utf8 {
+            hash ^= UInt64(byte)
+            hash = hash &* 0x0000_0100_0000_01b3
+        }
+        return Int(hash % UInt64(palette.count))
+    }
+}

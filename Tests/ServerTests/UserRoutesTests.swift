@@ -320,6 +320,20 @@ struct UserRoutesTests {
         }
     }
 
+    /// The deny case for deactivation, beside the allow case above.
+    @Test("a member cannot deactivate anybody, including themselves", arguments: [true, false])
+    func memberCannotDeactivate(_ themselves: Bool) async throws {
+        try await withWorld { w in
+            let target = themselves ? w.member.id : w.admin.id
+            let response = try await call(
+                w, .patch, "/api/v1/users/\(target.rawValue.uuidString)",
+                token: w.memberToken, json: ["active": false])
+
+            #expect(response.status == .forbidden)
+            #expect(try UserRepository(database: w.database).find(target)?.active == true)
+        }
+    }
+
     /// An Admin's agent is not an admin (ADR 0007), so a token that could create
     /// accounts would quietly widen every agent's authority to the maximum.
     @Test("an agent token cannot create a user")

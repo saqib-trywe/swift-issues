@@ -294,6 +294,23 @@ The decision that shaped everything else: **CLI tests run in-process against the
 | The editor **does not open when another field was named** | `issues edit PROJ-1 --status done` must not stop for a text editor nobody asked for |
 | `--unset` accepts **only nullable fields** | `Settable` makes "clear the status" unrepresentable in the API, so `--unset status` is rejected by name rather than sent and refused |
 
+### CLI: the remaining nouns, and two gaps they exposed
+
+**745 tests. Core 99.26%, Server 98.22%, CLI 92.33%.** `project`, `label` and `user` complete the noun surface.
+
+Two things were missing before these could work at all:
+
+- **There was no way to set a password.** `UserCreate` has no password field and no endpoint existed, so `issues user create` would have made an account nobody could ever log into. Added `PUT /users/:id/password`: changing your own requires the current one, an Admin resetting somebody else's does not, an agent may never do either, and any change revokes that user's sessions. Password stays out of `UserCreate` deliberately — a `PUT` create is retried after a lost response by design, and a password in a retried body is one more place it can be logged.
+- **Label colour was an unvalidated `String`.** Now `#RRGGBB`, validated in Core and enforced on both create and patch, so no client has to defend against `banana` in a field it wants to draw. With no `--color`, one is picked from a fixed palette by an **FNV-1a hash of the lowercased name** — Swift's own `hashValue` is seeded per process and would give a label a different colour every restart.
+
+| Decision | Why |
+| --- | --- |
+| Admin-only verbs are **listed in help for everyone** and rejected at call | Hiding them makes `--help` depend on who you are, which means help needs a network round trip and a valid token to render |
+| `user create` **says the account cannot log in yet** | Otherwise it looks ready and silently is not |
+| The password prompt has **no flag equivalent** | A password in argv is visible in `ps` and lands in shell history. Read twice, because a mistyped password nobody can see is an account locked out by a typo |
+| Changing your own password **clears the stored credential** | The server just revoked that token; leaving it would make the next command fail with a confusing 401 |
+| Unarchiving and reactivating **do not confirm** | They are not destructive, and a prompt would make undoing a mistake harder than making one |
+
 ### Open gaps
 
 - **`expand` is not implemented server-side.** Ticket 06 specifies it and `Expansion` exists in Core, but no route reads the parameter. The CLI resolves assignee names with a second request instead; a list view in the apps will want the real thing.
@@ -308,13 +325,13 @@ The decision that shaped everything else: **CLI tests run in-process against the
 - **`ExitCode` collides with ArgumentParser's own type**; the CLI's is `ExitStatus`. `CommandError` is not public, so a parse failure is identified by ArgumentParser's own `exitCode(for:)` classification.
 - **A leading `-` cannot start an option's value**: `--sort -updated` parses as a flag. `--reverse` exists because of it; `--sort=-updated` also works.
 - **`$HOME` is ignored by both `FileManager.homeDirectoryForCurrentUser` and `URL.applicationSupportDirectory`** — they read the password database. Smoke tests run with `HOME=/tmp/...` wrote into the real home twice: once a config file, once a whole SQLite database. Both the CLI and `ServerEntryPoint` now resolve `$HOME` first, which is also what makes a throwaway instance possible at all.
+- **`guard case .unknown = value else { throw }` is inverted** — it throws when the value *is* known. `if case .unknown = value { throw }` is what you want, and a test caught it in `user create --role`.
 - **A pty is needed to smoke-test anything interactive**, and `script` cannot allocate one here while `python3 -c` with the program on stdin deadlocks. Test the seam directly instead.
 - **The coverage gate keeps finding missing *positive* paths**, never missing negative ones. This session: no test that an Admin could promote anyone, none for `--project`, `--priority` or `--server`. Write the allow case beside the deny case, every time.
 
 ### Next
 
-1. **`project`, `label` and `user` nouns** — the remaining command surface, including the Admin-only verbs that appear in help for everyone and are rejected at call.
-2. **`auth token create|list|revoke`** — needs server endpoints for listing and revoking sessions, which do not exist yet.
-3. **`issues completion`** for zsh/bash/fish.
-4. **`expand`** server-side, so list views stop costing a second request.
-5. Then the **native apps** (ticket 10, variant C), and **MCP** last.
+1. **`auth token create|list|revoke`** — the last of ticket 11's surface. Needs server endpoints for listing and revoking sessions, which do not exist yet, so it is a server slice before a CLI one. This is also what makes agent tokens mintable, which MCP depends on.
+2. **`issues completion`** for zsh/bash/fish.
+3. **`expand`** server-side, so list views stop costing a second request.
+4. Then the **native apps** (ticket 10, variant C), and **MCP** last.

@@ -21,6 +21,9 @@ struct Root: AsyncParsableCommand {
         subcommands: [
             AuthCommand.self,
             IssueCommand.self,
+            ProjectCommand.self,
+            LabelCommand.self,
+            UserCommand.self,
             ConfigCommand.self,
         ]
     )

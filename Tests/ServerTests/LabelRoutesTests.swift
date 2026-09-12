@@ -92,6 +92,66 @@ struct LabelRoutesTests {
 
     /// Labels are created at an id derived from (project, name) so two clients
     /// creating "backend" offline converge rather than producing duplicates.
+    /// Colour is validated server-side so no client has to defend against
+    /// `banana` in a field it wants to draw as a swatch.
+    @Test(
+        "a malformed colour is refused on create",
+        arguments: [
+            "banana", "2D6CDF", "#2D6CD", "#GGGGGG", "",
+        ])
+    func malformedColourIsRefusedOnCreate(_ color: String) async throws {
+        try await withServer { h in
+            let id: Label.ID = Label.deriveID(projectId: h.project.id, name: "backend")
+            let json: String = try labelJSON(name: "backend", color: color)
+
+            try await h.client.execute(
+                uri: self.labelURI(h.project, id), method: .put,
+                headers: self.headers(h.token), body: ByteBuffer(string: json)
+            ) { response in
+                #expect(response.status == .unprocessableContent)
+            }
+        }
+    }
+
+    @Test("a malformed colour is refused on patch")
+    func malformedColourIsRefusedOnPatch() async throws {
+        try await withServer { h in
+            let id: Label.ID = Label.deriveID(projectId: h.project.id, name: "backend")
+            try await h.client.execute(
+                uri: self.labelURI(h.project, id), method: .put,
+                headers: self.headers(h.token),
+                body: ByteBuffer(string: try labelJSON(name: "backend", color: "#2D6CDF"))
+            ) { _ in }
+
+            let patch: String = try String(
+                decoding: JSONSerialization.data(
+                    withJSONObject: ["color": "rgb(1,2,3)"], options: [.sortedKeys]),
+                as: UTF8.self)
+            try await h.client.execute(
+                uri: self.labelURI(h.project, id), method: .patch,
+                headers: self.headers(h.token), body: ByteBuffer(string: patch)
+            ) { response in
+                #expect(response.status == .unprocessableContent)
+            }
+        }
+    }
+
+    /// Lower-case hex is just as valid, and rejecting it would be a surprise.
+    @Test("a lower-case colour is accepted")
+    func lowerCaseColourIsAccepted() async throws {
+        try await withServer { h in
+            let id: Label.ID = Label.deriveID(projectId: h.project.id, name: "backend")
+            let json: String = try labelJSON(name: "backend", color: "#2d6cdf")
+
+            try await h.client.execute(
+                uri: self.labelURI(h.project, id), method: .put,
+                headers: self.headers(h.token), body: ByteBuffer(string: json)
+            ) { response in
+                #expect(response.status == .created)
+            }
+        }
+    }
+
     @Test("creating a label at its derived id succeeds")
     func createAtDerivedID() async throws {
         try await withServer { h in

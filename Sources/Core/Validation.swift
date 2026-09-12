@@ -222,3 +222,37 @@ extension Validation {
         return []
     }
 }
+
+extension Validation {
+
+    /// Labels carry a colour so clients can render a swatch, and `#RRGGBB` is the
+    /// one notation every platform's colour type can parse without a library.
+    ///
+    /// Validated rather than left free-form: an unvalidated string means every
+    /// client — CLI, macOS, iOS — has to cope with `banana` in a field it wants to
+    /// draw.
+    public static func labelColor(_ value: String) -> [ValidationFailure] {
+        func failure(_ message: String) -> [ValidationFailure] {
+            [.init(field: "color", code: .invalid, message: message)]
+        }
+
+        guard !value.isEmpty else {
+            return [.init(field: "color", code: .required, message: "A colour is required.")]
+        }
+        // Byte-level, because `isHexDigit` is Unicode-wide and would accept
+        // full-width and Arabic-Indic digits.
+        let bytes = Array(value.utf8)
+        guard bytes.count == 7, bytes[0] == UInt8(ascii: "#") else {
+            return failure("A colour must be six hex digits with a leading '#', like #2D6CDF.")
+        }
+        let isHex = bytes.dropFirst().allSatisfy {
+            (UInt8(ascii: "0")...UInt8(ascii: "9")).contains($0)
+                || (UInt8(ascii: "a")...UInt8(ascii: "f")).contains($0)
+                || (UInt8(ascii: "A")...UInt8(ascii: "F")).contains($0)
+        }
+        guard isHex else {
+            return failure("A colour must be six hex digits with a leading '#', like #2D6CDF.")
+        }
+        return []
+    }
+}
