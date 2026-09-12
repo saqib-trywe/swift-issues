@@ -93,7 +93,9 @@ struct CLIWorld: Sendable {
         environment: [String: String] = [:],
         isInputTerminal: Bool = false,
         input: [String] = [],
-        secrets: [String] = []
+        secrets: [String] = [],
+        standardInput: String = "",
+        editor: (@Sendable (String) throws -> String?)? = nil
     ) async -> CapturedOutput {
         let out = RecordingSink()
         let error = RecordingSink()
@@ -123,7 +125,11 @@ struct CLIWorld: Sendable {
             workingDirectory: directory,
             configurationFile: configurationFile,
             credentials: credentials,
-            transport: { _ in transport }
+            transport: { _ in transport },
+            // Defaults to abandoning the edit, so a command that unexpectedly
+            // reaches for an editor fails loudly rather than inventing text.
+            openEditor: editor ?? { _ in nil },
+            readStandardInput: { standardInput }
         )
 
         let code = await IssuesCLI.run(arguments: arguments, context: context)
@@ -142,6 +148,7 @@ struct CLIWorld: Sendable {
 /// Builds an instance with one Admin, one Project, and whatever issues a test asks for.
 func withCLI(
     issues: [Issue] = [],
+    configuresProject: Bool = true,
     _ body: @Sendable @escaping (CLIWorld) async throws -> Void
 ) async throws {
     let database = try AppDatabase.inMemory()
@@ -167,6 +174,13 @@ func withCLI(
         .appending(path: "issues-cli-\(UUID().uuidString)")
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
     defer { try? FileManager.default.removeItem(at: directory) }
+
+    // Most commands need a project to act on, and spelling --project on every
+    // invocation would bury the thing each test is actually about.
+    if configuresProject {
+        try "project = \"\(project.key.wireValue)\"\n".write(
+            to: directory.appending(path: "config.toml"), atomically: true, encoding: .utf8)
+    }
 
     let application = Application(router: IssuesRouter.build(database: database))
     try await application.test(.router) { client in

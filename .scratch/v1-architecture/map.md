@@ -276,9 +276,28 @@ The decision that shaped everything else: **CLI tests run in-process against the
 - **`LoginRequest`/`LoginResponse` moved into Core.** They were declared in `Server`, so the CLI could not name the type it had to decode — exactly the drift that sharing DTOs is supposed to prevent.
 - **`FlatTOML` moved into Core**, shared by the server's config and the CLI's, so the two cannot come to accept different dialects of the same format.
 
+### CLI: the write verbs
+
+**678 tests. Core 99.23%, Server 98.17%, CLI 90.10%.**
+
+`create`, `edit`, `comment`, `assign`, `close`, `start`, `cancel`, `reopen` and `delete`. Smoke-tested end to end against a real `issues-server` over HTTP, not only in-process.
+
+| Decision | Why |
+| --- | --- |
+| **Scissors, not `#` stripping**, for editor instructions | `# Heading` is both valid Markdown and a plausible instruction, so no rule about `#` can tell them apart — and guessing wrong deletes what somebody wrote. git's `>8` marker is positional and cannot be ambiguous. A deleted marker keeps the whole buffer |
+| The editor is a **closure on `CommandContext`** | No command test spawns a process. `Editor.run` itself has its own tests with a scripted `$EDITOR`, covering quoting, the temp file and a non-zero exit |
+| A non-zero editor exit is an **error, not an abandoned edit** | Treating a killed editor as "saved an empty buffer" would quietly discard the text |
+| **Saving unchanged is not a write** | Otherwise every opened editor bumps `updatedAt` and wins a last-write-wins race it never should have entered |
+| **Flags are validated before any request** | `issues edit PROJ-1 --status finished` should say the status is unknown, not that the issue is missing. The typo is the problem either way |
+| An **unknown label is refused**, naming `issues label create` | Labels are a shared, project-wide vocabulary; a tracker where every typo silently becomes a label fills with near-duplicates nobody cleans out |
+| An **ambiguous assignee is refused** | Two people called "Sam" must not resolve to whichever the server returned first |
+| The editor **does not open when another field was named** | `issues edit PROJ-1 --status done` must not stop for a text editor nobody asked for |
+| `--unset` accepts **only nullable fields** | `Settable` makes "clear the status" unrepresentable in the API, so `--unset status` is rejected by name rather than sent and refused |
+
 ### Open gaps
 
 - **`expand` is not implemented server-side.** Ticket 06 specifies it and `Expansion` exists in Core, but no route reads the parameter. The CLI resolves assignee names with a second request instead; a list view in the apps will want the real thing.
+- **The server's SQLite files are `0644` inside a `0700` directory.** Protection is directory-level by design, but a file moved or copied out of it carries no protection of its own. Worth a `chmod` after open.
 - **`.issues.toml` may not set `url`** — a repository-controlled file that could retarget the CLI at another host would make `git clone` enough to redirect traffic. Refused explicitly, and tested.
 
 ### Notes for whoever picks this up
@@ -288,13 +307,14 @@ The decision that shaped everything else: **CLI tests run in-process against the
 - **Types written decode-only for the client keep needing `Encodable`** — `ServerMeta`, `Paginated`, `SyncRecord`, `SyncResult`, `SyncPushResponse`, `SyncChange`, `SyncPullResponse`. Default API/sync types to `Codable`.
 - **`ExitCode` collides with ArgumentParser's own type**; the CLI's is `ExitStatus`. `CommandError` is not public, so a parse failure is identified by ArgumentParser's own `exitCode(for:)` classification.
 - **A leading `-` cannot start an option's value**: `--sort -updated` parses as a flag. `--reverse` exists because of it; `--sort=-updated` also works.
-- **`FileManager.homeDirectoryForCurrentUser` ignores `$HOME`** — it reads the password database. A smoke test run with `HOME=/tmp/...` wrote to the real home. The CLI resolves `$HOME` first; anything else touching a home directory should too.
+- **`$HOME` is ignored by both `FileManager.homeDirectoryForCurrentUser` and `URL.applicationSupportDirectory`** — they read the password database. Smoke tests run with `HOME=/tmp/...` wrote into the real home twice: once a config file, once a whole SQLite database. Both the CLI and `ServerEntryPoint` now resolve `$HOME` first, which is also what makes a throwaway instance possible at all.
+- **A pty is needed to smoke-test anything interactive**, and `script` cannot allocate one here while `python3 -c` with the program on stdin deadlocks. Test the seam directly instead.
 - **The coverage gate keeps finding missing *positive* paths**, never missing negative ones. This session: no test that an Admin could promote anyone, none for `--project`, `--priority` or `--server`. Write the allow case beside the deny case, every time.
 
 ### Next
 
-1. **`issue create` / `edit` / `comment`** — the write verbs, including `--unset` for Merge Patch's third state and the `$EDITOR` path.
-2. **`project`, `label` and `user` nouns**, plus the destructive-command confirmations (`--yes` off a TTY).
+1. **`project`, `label` and `user` nouns** — the remaining command surface, including the Admin-only verbs that appear in help for everyone and are rejected at call.
+2. **`auth token create|list|revoke`** — needs server endpoints for listing and revoking sessions, which do not exist yet.
 3. **`issues completion`** for zsh/bash/fish.
 4. **`expand`** server-side, so list views stop costing a second request.
 5. Then the **native apps** (ticket 10, variant C), and **MCP** last.

@@ -117,7 +117,7 @@ struct ConfigCommandTests {
 
     @Test("set then get round-trips through the file")
     func setThenGetRoundTrips() async throws {
-        try await withCLI { world in
+        try await withCLI(configuresProject: false) { world in
             let set = await world.run(
                 ["config", "set", "project", "WEB"], environment: ["ISSUES_NO_URL": "1"])
             #expect(set.code == 0)
@@ -139,7 +139,7 @@ struct ConfigCommandTests {
             ["config", "set", "colour", "blue"],
         ])
     func invalidValueIsRejectedBeforeWriting(_ arguments: [String]) async throws {
-        try await withCLI { world in
+        try await withCLI(configuresProject: false) { world in
             let result = await world.run(arguments, environment: ["ISSUES_NO_URL": "1"])
 
             #expect(result.code == 2)
@@ -165,7 +165,7 @@ struct ConfigCommandTests {
 
     @Test("get reports the resolved value, not the file's")
     func getReportsTheResolvedValue() async throws {
-        try await withCLI { world in
+        try await withCLI(configuresProject: false) { world in
             _ = await world.run(
                 ["config", "set", "url", "https://file.example.test"],
                 environment: ["ISSUES_NO_URL": "1"])
@@ -180,7 +180,7 @@ struct ConfigCommandTests {
 
     @Test("path prints the config file location")
     func pathPrintsTheLocation() async throws {
-        try await withCLI { world in
+        try await withCLI(configuresProject: false) { world in
             let result = await world.run(["config", "path"], environment: ["ISSUES_NO_URL": "1"])
 
             #expect(result.code == 0)
@@ -190,7 +190,7 @@ struct ConfigCommandTests {
 
     @Test("getting an unset value fails rather than printing nothing")
     func gettingAnUnsetValueFails() async throws {
-        try await withCLI { world in
+        try await withCLI(configuresProject: false) { world in
             let result = await world.run(["config", "get", "project"], environment: ["ISSUES_NO_URL": "1"])
             #expect(result.code != 0)
         }
@@ -202,7 +202,7 @@ struct ConfigCommandEdgeTests {
 
     @Test("getting an unknown setting is a usage error naming the known ones")
     func gettingAnUnknownSettingIsAUsageError() async throws {
-        try await withCLI { world in
+        try await withCLI(configuresProject: false) { world in
             let result = await world.run(
                 ["config", "get", "colour"], environment: ["ISSUES_NO_URL": "1"])
 
@@ -215,7 +215,7 @@ struct ConfigCommandEdgeTests {
     /// coming from a checkout is invisible.
     @Test("path shows a per-directory file when one applies")
     func pathShowsThePerDirectoryFile() async throws {
-        try await withCLI { world in
+        try await withCLI(configuresProject: false) { world in
             try "project = \"WEB\"\n".write(
                 to: world.directory.appending(path: ".issues.toml"),
                 atomically: true, encoding: .utf8)

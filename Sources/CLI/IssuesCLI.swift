@@ -21,7 +21,11 @@ public enum IssuesCLI {
             workingDirectory: URL(fileURLWithPath: FileManager.default.currentDirectoryPath),
             configurationFile: CLIConfiguration.defaultFile(environment: environment, home: home),
             credentials: KeychainCredentialStore(),
-            transport: { URLSessionTransport(baseURL: $0) }
+            transport: { URLSessionTransport(baseURL: $0) },
+            openEditor: { try Editor.run(template: $0, environment: environment) },
+            readStandardInput: {
+                String(decoding: FileHandle.standardInput.readDataToEndOfFile(), as: UTF8.self)
+            }
         )
         return await run(arguments: Array(CommandLine.arguments.dropFirst()), context: context)
     }

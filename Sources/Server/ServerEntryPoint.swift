@@ -31,6 +31,21 @@ public enum ServerEntryPoint {
         applicationSupport.appending(path: "Issues")
     }
 
+    /// Where Application Support lives, preferring `$HOME`.
+    ///
+    /// `URL.applicationSupportDirectory` reads the password database and ignores
+    /// `$HOME`, so there is no way to point a run at a scratch directory — a smoke
+    /// test against a throwaway instance writes into the operator's real one
+    /// instead. ADR 0010 puts everything under a per-user path, and honouring the
+    /// variable is what makes that path choosable.
+    public static func applicationSupport(environment: [String: String]) -> URL {
+        guard let home = environment["HOME"], !home.isEmpty else {
+            return .applicationSupportDirectory
+        }
+        return URL(fileURLWithPath: home)
+            .appending(path: "Library").appending(path: "Application Support")
+    }
+
     /// `0700`: the directory holds every issue and every session hash.
     static func prepareDirectory(at url: URL) throws {
         try FileManager.default.createDirectory(
@@ -57,18 +72,19 @@ public enum ServerEntryPoint {
     }
 
     public static func main() async throws {
-        let support: URL = .applicationSupportDirectory
+        let environment = ProcessInfo.processInfo.environment
+        let support = applicationSupport(environment: environment)
         let url = databaseURL(applicationSupport: support)
         try prepareDirectory(at: url)
 
         let configuration = try ServerConfiguration.load(
             file: configurationURL(applicationSupport: support),
-            environment: ProcessInfo.processInfo.environment)
+            environment: environment)
         let database = try AppDatabase.open(at: url)
 
         let tokenURL = bootstrapTokenURL(applicationSupport: support)
         if let token = try prepareFirstRun(
-            database: database, environment: ProcessInfo.processInfo.environment,
+            database: database, environment: environment,
             tokenURL: tokenURL)
         {
             print("Setup token (valid 60 minutes): \(token)")

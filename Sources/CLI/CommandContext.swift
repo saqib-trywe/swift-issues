@@ -16,6 +16,11 @@ struct CommandContext: Sendable {
     /// Builds a transport for a resolved server. A closure so tests can dispatch
     /// straight into the real router instead of opening a socket.
     var transport: @Sendable (URL) -> any HTTPTransport
+    /// Opens `$EDITOR` over a template and returns what came back, or `nil` if the
+    /// edit was abandoned. A closure so no test ever spawns a process.
+    var openEditor: @Sendable (String) throws -> String?
+    /// Reads all of stdin, for the `-` convention.
+    var readStandardInput: @Sendable () -> String
 
     func configuration() throws -> CLIConfiguration {
         try CLIConfiguration.load(
@@ -59,6 +64,23 @@ struct CommandContext: Sendable {
     /// A client for the calls that happen before a token exists: login, health.
     func unauthenticatedClient(server: URL) -> APIClient {
         APIClient(transport: transport(server), token: { nil })
+    }
+
+    /// Asks before doing something that cannot be undone.
+    ///
+    /// Ticket 11: prompt on a terminal, require `--yes` otherwise. Never block
+    /// waiting for an answer nobody can give — a CI job stuck on an invisible
+    /// prompt reads as a hang, not as a mistake.
+    func confirm(_ question: String, assumeYes: Bool) throws {
+        if assumeYes { return }
+        guard terminal.isInputTerminal else {
+            throw CLIError.missingInput(flag: "--yes")
+        }
+        terminal.output.write("\(question) [y/N] ")
+        let answer = (terminal.readLine() ?? "").trimmingCharacters(in: .whitespaces).lowercased()
+        // Anything but an explicit yes is a no, including an empty line: the
+        // default for a destructive action must never be "go ahead".
+        guard answer == "y" || answer == "yes" else { throw CLIError.cancelled }
     }
 }
 

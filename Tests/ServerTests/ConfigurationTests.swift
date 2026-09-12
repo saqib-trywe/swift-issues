@@ -180,3 +180,47 @@ struct ServerConfigurationTests {
         #expect(config.instanceName == "Trywe #1")
     }
 }
+
+/// Where the server keeps its files.
+@Suite("Application support location")
+struct ApplicationSupportTests {
+
+    /// `URL.applicationSupportDirectory` reads the password database and ignores
+    /// `$HOME`, so without this a smoke test against a throwaway instance writes
+    /// into the operator's real one. Found by doing exactly that.
+    @Test("HOME is honoured when set")
+    func homeIsHonouredWhenSet() {
+        let support = ServerEntryPoint.applicationSupport(environment: ["HOME": "/tmp/sandbox"])
+        #expect(support.path == "/tmp/sandbox/Library/Application Support")
+
+        let database = ServerEntryPoint.databaseURL(applicationSupport: support)
+        #expect(database.path == "/tmp/sandbox/Library/Application Support/Issues/issues.sqlite")
+    }
+
+    @Test(
+        "an unset or empty HOME falls back to the account's directory",
+        arguments: [
+            [String: String](),
+            ["HOME": ""],
+        ])
+    func unsetHomeFallsBack(_ environment: [String: String]) {
+        #expect(
+            ServerEntryPoint.applicationSupport(environment: environment)
+                == URL.applicationSupportDirectory)
+    }
+
+    /// Every file the server owns lives in one directory, so an operator has one
+    /// thing to back up and one thing to lock down.
+    @Test("the database, config and token file share a directory")
+    func filesShareADirectory() {
+        let support = ServerEntryPoint.applicationSupport(environment: ["HOME": "/tmp/sandbox"])
+        let parents = Set(
+            [
+                ServerEntryPoint.databaseURL(applicationSupport: support),
+                ServerEntryPoint.configurationURL(applicationSupport: support),
+                ServerEntryPoint.bootstrapTokenURL(applicationSupport: support),
+            ].map { $0.deletingLastPathComponent().path })
+
+        #expect(parents.count == 1)
+    }
+}

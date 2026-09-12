@@ -7,7 +7,10 @@ struct IssueCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "issue",
         abstract: "Work with issues.",
-        subcommands: [List.self, Show.self]
+        subcommands: [
+            List.self, Show.self, Create.self, Edit.self, Comment.self,
+            Assign.self, Close.self, Start.self, Cancel.self, Reopen.self, Delete.self,
+        ]
     )
 
     struct List: AsyncParsableCommand {
