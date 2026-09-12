@@ -44,8 +44,10 @@ struct LoginRoutes: Sendable {
             }
 
             try clearFailures(for: email)
+            // Labelled, so it is identifiable in `auth token list`. An unlabelled
+            // row in a revocation list tells an Admin nothing about what it is.
             let token = try SessionRepository(database: database).create(
-                for: found.user.id, kind: .human, deviceId: nil)
+                for: found.user.id, kind: .human, deviceId: nil, label: "password login")
             return try EditedResponse(
                 status: .ok, response: LoginResponse(token: token.raw, user: found.user))
         }

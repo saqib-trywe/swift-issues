@@ -3,17 +3,6 @@ import CryptoKit
 import Foundation
 import GRDB
 
-/// What kind of holder a token was issued to.
-///
-/// An Agent's authority is fixed and narrower than its owner's regardless of that
-/// owner's Role, which is why the kind lives on the token rather than being
-/// derived from the User. See ADR 0007.
-public enum TokenKind: String, Codable, Hashable, Sendable {
-    case human
-    case agent
-    case agentReadonly
-}
-
 /// An opaque bearer token.
 public struct SessionToken: Sendable {
     /// Exists exactly once, at creation. Never persisted, never recoverable.
@@ -34,6 +23,15 @@ public struct SessionToken: Sendable {
     public static func hash(_ raw: String) -> String {
         SHA256.hash(data: Data(raw.utf8)).map { String(format: "%02x", $0) }.joined()
     }
+}
+
+/// A token that has just been minted, with the public id it can be revoked by.
+///
+/// `raw` is named to match `SessionToken`, so this can stand in wherever a
+/// creation result was previously read for its raw value.
+public struct IssuedToken: Sendable {
+    public let raw: String
+    public let id: SessionSummary.ID
 }
 
 /// Who is making a request.
@@ -60,24 +58,102 @@ public struct SessionRepository: Sendable {
         self.database = database
     }
 
+    @discardableResult
     public func create(
         for userId: User.ID, kind: TokenKind, deviceId: String?, label: String? = nil
-    ) throws -> SessionToken {
+    ) throws -> IssuedToken {
         let token = SessionToken.generate()
+        let id = SessionSummary.ID(UUIDv7.generate())
         let now = Date()
         try database.writer.write { db in
             try db.execute(
                 sql: """
                     INSERT INTO session
-                        (token_hash, user_id, device_id, kind, label, created_at, expires_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                        (token_hash, id, user_id, device_id, kind, label, created_at, expires_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                 arguments: [
-                    SessionToken.hash(token.raw), userId.rawValue.uuidString, deviceId,
-                    kind.rawValue, label, now, now.addingTimeInterval(Self.idleExpiry),
+                    SessionToken.hash(token.raw), id.rawValue.uuidString,
+                    userId.rawValue.uuidString, deviceId,
+                    kind.wireValue, label, now, now.addingTimeInterval(Self.idleExpiry),
                 ])
         }
-        return token
+        return IssuedToken(raw: token.raw, id: id)
+    }
+
+    /// Every token a user holds, newest first, revoked ones included.
+    ///
+    /// Revoked tokens stay listed with the fact recorded: a listing is what an
+    /// Admin reads to work out what happened, and silently dropping the revoked
+    /// ones hides exactly the evidence they are looking for.
+    ///
+    /// Ordered by `created_at` with the id as a tie-break. **Not** by the id alone:
+    /// UUIDv7 orders across milliseconds but its tail is random within one, so two
+    /// tokens minted in the same millisecond would come back in arbitrary order.
+    /// The tie-break makes that case stable rather than merely unlikely.
+    public func list(for userId: User.ID) throws -> [SessionSummary] {
+        try database.reader.read { db in
+            try Row.fetchAll(
+                db,
+                sql: """
+                    SELECT id, user_id, kind, label, device_id, created_at,
+                           last_used_at, expires_at, revoked_at
+                    FROM session WHERE user_id = ? AND id IS NOT NULL
+                    ORDER BY created_at DESC, id DESC
+                    """,
+                arguments: [userId.rawValue.uuidString]
+            ).compactMap(Self.summary(from:))
+        }
+    }
+
+    /// Finds one token by its public id, so a route can check who owns it before
+    /// revoking.
+    public func find(id: SessionSummary.ID) throws -> SessionSummary? {
+        try database.reader.read { db in
+            guard
+                let row = try Row.fetchOne(
+                    db,
+                    sql: """
+                        SELECT id, user_id, kind, label, device_id, created_at,
+                               last_used_at, expires_at, revoked_at
+                        FROM session WHERE id = ?
+                        """,
+                    arguments: [id.rawValue.uuidString])
+            else { return nil }
+            return Self.summary(from: row)
+        }
+    }
+
+    /// Revokes one token by its public id, reporting whether it existed.
+    ///
+    /// Marks rather than deletes, so the row survives for the listing above.
+    @discardableResult
+    public func revoke(id: SessionSummary.ID) throws -> Bool {
+        try database.writer.write { db in
+            try db.execute(
+                sql: "UPDATE session SET revoked_at = ? WHERE id = ? AND revoked_at IS NULL",
+                arguments: [Date(), id.rawValue.uuidString])
+            return db.changesCount > 0
+        }
+    }
+
+    /// A malformed id column is skipped rather than throwing: one corrupt row must
+    /// not make the whole listing unreadable, which is when it is most needed.
+    static func summary(from row: Row) -> SessionSummary? {
+        guard let rawId: String = row["id"], let uuid = UUID(uuidString: rawId),
+            let rawUser: String = row["user_id"], let userUUID = UUID(uuidString: rawUser)
+        else { return nil }
+
+        return SessionSummary(
+            id: SessionSummary.ID(uuid),
+            userId: User.ID(userUUID),
+            kind: TokenKind(wireValue: row["kind"]),
+            label: row["label"],
+            deviceId: row["device_id"],
+            createdAt: row["created_at"],
+            lastUsedAt: row["last_used_at"],
+            expiresAt: row["expires_at"],
+            revokedAt: row["revoked_at"])
     }
 
     /// Resolves a raw token, or `nil` if it is unknown, revoked, expired, or
@@ -120,7 +196,7 @@ public struct SessionRepository: Sendable {
             return Authenticated(
                 userId: User.ID(userUUID),
                 role: Role(wireValue: row["role"]),
-                kind: TokenKind(rawValue: row["kind"]) ?? .human,
+                kind: TokenKind(wireValue: row["kind"]),
                 deviceId: row["device_id"]
             )
         }
@@ -142,8 +218,6 @@ public struct SessionRepository: Sendable {
         }
     }
 
-    /// Immediate, which is the whole reason ADR 0006 chose opaque server-side
-    /// tokens over JWTs.
     /// Ends every session a user holds.
     ///
     /// Deactivation has to do this. Without it, "deactivate" would mean nothing
@@ -159,6 +233,8 @@ public struct SessionRepository: Sendable {
         }
     }
 
+    /// Revokes one token by its raw value. Immediate, which is the whole reason
+    /// ADR 0006 chose opaque server-side tokens over JWTs.
     public func revoke(_ raw: String) throws {
         try database.writer.write { db in
             try db.execute(

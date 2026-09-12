@@ -76,6 +76,11 @@ extension Authenticated {
             [.write]
         case .agentReadonly:
             []
+        // A kind this build does not recognise gets nothing. Defaulting to the
+        // human set would widen an unknown token's authority to the maximum,
+        // which is the wrong direction to be wrong in.
+        case .unknown:
+            []
         }
     }
 }

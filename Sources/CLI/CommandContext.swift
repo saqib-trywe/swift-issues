@@ -76,7 +76,9 @@ struct CommandContext: Sendable {
         guard terminal.isInputTerminal else {
             throw CLIError.missingInput(flag: "--yes")
         }
-        terminal.output.write("\(question) [y/N] ")
+        // stderr, not stdout: a prompt is not program output, and writing it to
+        // stdout corrupts anything piping the result.
+        terminal.error.write("\(question) [y/N] ")
         let answer = (terminal.readLine() ?? "").trimmingCharacters(in: .whitespaces).lowercased()
         // Anything but an explicit yes is a no, including an empty line: the
         // default for a destructive action must never be "go ahead".

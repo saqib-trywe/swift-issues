@@ -237,7 +237,8 @@ struct AuthServerSelectionTests {
                 secrets: [CLIWorld.password])
 
             #expect(result.code == 0)
-            #expect(result.standardOutput.contains("Email:"))
+            // On stderr: a prompt is not program output.
+            #expect(result.standardError.contains("Email:"))
             #expect(result.standardOutput.contains("Logged in"))
         }
     }

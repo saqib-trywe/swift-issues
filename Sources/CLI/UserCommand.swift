@@ -276,11 +276,13 @@ struct UserCommand: AsyncParsableCommand {
             throw CLIError.missingInput(
                 flag: "a terminal (there is no password flag, by design: it would land in shell history)")
         }
-        context.terminal.output.write(prompt)
+        // stderr, so `TOKEN=$(issues auth token create -q)` captures the token
+        // and not the prompt.
+        context.terminal.error.write(prompt)
         guard let entered = context.terminal.readSecret(), !entered.isEmpty else {
             throw CLIError.missingInput(flag: "a password")
         }
-        context.terminal.print()
+        context.terminal.error.write("\n")
         return entered
     }
 }

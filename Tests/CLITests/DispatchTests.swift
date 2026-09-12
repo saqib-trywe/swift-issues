@@ -260,3 +260,73 @@ struct ConfigCommandEdgeTests {
         }
     }
 }
+
+/// Prompts are not program output.
+///
+/// Found by `TOKEN=$(issues auth token create -q)` capturing "Password: " along
+/// with the token. Every prompt and confirmation goes to stderr, so stdout stays
+/// exactly what a caller asked for.
+@Suite("Prompts stay off stdout")
+struct PromptStreamTests {
+
+    @Test("a password prompt does not appear on stdout")
+    func passwordPromptDoesNotAppearOnStdout() async throws {
+        try await withCLI { world in
+            try world.authenticate()
+            let result = await world.run(
+                ["auth", "token", "create", "--quiet", "--label", "ci"],
+                isInputTerminal: true, secrets: [CLIWorld.password])
+
+            #expect(!result.standardOutput.contains("Password"))
+            #expect(result.standardError.contains("Password"))
+        }
+    }
+
+    @Test("an email prompt does not appear on stdout")
+    func emailPromptDoesNotAppearOnStdout() async throws {
+        try await withCLI { world in
+            let result = await world.run(
+                ["auth", "login"],
+                isInputTerminal: true, input: ["saqib@example.com"], secrets: [CLIWorld.password])
+
+            #expect(result.code == 0, Comment(rawValue: result.standardError))
+            #expect(!result.standardOutput.contains("Email"))
+        }
+    }
+
+    @Test("a destructive confirmation does not appear on stdout")
+    func confirmationDoesNotAppearOnStdout() async throws {
+        try await withCLI { world in
+            try world.authenticate()
+            let issue = try IssueRepository(database: world.database).create(
+                DomainIssue.fixture(
+                    key: nil, projectId: world.project.id, title: "Doomed",
+                    reporterId: world.owner.id))
+            let key = try #require(issue.key).wireValue
+
+            let result = await world.run(
+                ["delete", key], isInputTerminal: true, input: ["y"])
+
+            #expect(result.code == 0, Comment(rawValue: result.standardError))
+            #expect(!result.standardOutput.contains("[y/N]"))
+            #expect(result.standardError.contains("[y/N]"))
+        }
+    }
+
+    /// The whole reason this matters: a --quiet write must be capturable straight
+    /// into a shell variable.
+    @Test("--quiet output is exactly one line with nothing else")
+    func quietOutputIsExactlyOneLine() async throws {
+        try await withCLI { world in
+            try world.authenticate()
+            let result = await world.run(
+                ["auth", "token", "create", "--quiet", "--label", "ci"],
+                isInputTerminal: true, secrets: [CLIWorld.password])
+
+            let lines = result.standardOutput.split(separator: "\n", omittingEmptySubsequences: false)
+                .filter { !$0.isEmpty }
+            #expect(lines.count == 1)
+            #expect(lines.first?.hasPrefix("issues_pat_") == true)
+        }
+    }
+}

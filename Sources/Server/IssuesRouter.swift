@@ -38,6 +38,7 @@ public enum IssuesRouter {
         }
 
         UserRoutes(database: database, hasher: PasswordHasher.production).register(on: api)
+        TokenRoutes(database: database).register(on: api)
         ProjectRoutes(database: database).register(on: api)
         IssueRoutes(database: database).register(on: api)
         CommentRoutes(database: database).register(on: api)

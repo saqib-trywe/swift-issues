@@ -311,6 +311,26 @@ Two things were missing before these could work at all:
 | Changing your own password **clears the stored credential** | The server just revoked that token; leaving it would make the next command fail with a confusing 401 |
 | Unarchiving and reactivating **do not confirm** | They are not destructive, and a prompt would make undoing a mistake harder than making one |
 
+### Personal access tokens: `auth token`
+
+**799 tests. Core 99.29%, Server 98.34%, CLI 92.74%.** This completes ticket 11's command surface, and it is what makes an agent token mintable — which MCP depends on.
+
+Needed a server slice first: `GET/POST /api/v1/auth/tokens`, `DELETE /api/v1/auth/tokens/:id`, and `GET /api/v1/users/:id/tokens`, plus **migration v5** adding a public `id` to `session`.
+
+| Decision | Why |
+| --- | --- |
+| A token's public id is a **new UUIDv7 column**, not its hash | A public identifier should never be derived from a secret. The migration **backfills existing rows**, or the one token an admin most wants to revoke is the one they cannot name |
+| Minting **always requires the password**, even holding a valid token | Otherwise a leaked token mints children and revoking the original leaves them working — the compromise outlives the revocation. Cost: `auth token create` cannot run headlessly, which is right; CI should be handed a token, not mint one |
+| An **agent may never mint a token** | An agent issuing a human-kind token would escape ADR 0007 entirely by granting itself its owner's full authority |
+| `POST`, not `PUT` at a caller-supplied id | The only create here that is not a `PUT`. A token is not a synced entity, cannot be made offline, and its response carries a secret that exists once; a client-chosen id would buy nothing |
+| An **unknown kind is refused at the door** | Stored verbatim it would authenticate and grant no capabilities at all — confusing rather than safe |
+| Revoked tokens **stay in the listing**, marked | A listing is what an Admin reads to work out what happened; dropping the revoked rows hides the evidence |
+| Revoking twice reports **410, not success** | A script needs to tell "I revoked it" from "somebody already had" |
+| `TokenKind` **moved to Core** as a lenient `WireEnum` | Clients read it (ticket 07 keeps the kind on the token so an Admin can spot an agent). An unrecognised kind grants **no** capabilities — defaulting to human would widen an unknown token to the maximum |
+| Login sessions are **labelled** | An unlabelled row in a revocation list tells an Admin nothing |
+
+**Prompts moved to stderr.** Found by `TOKEN=$(issues auth token create -q)` capturing `"Password: "` along with the token. Every prompt, hidden-password newline and destructive confirmation now goes to stderr, so stdout is exactly what the caller asked for. There is a dedicated suite holding that line.
+
 ### Open gaps
 
 - **`expand` is not implemented server-side.** Ticket 06 specifies it and `Expansion` exists in Core, but no route reads the parameter. The CLI resolves assignee names with a second request instead; a list view in the apps will want the real thing.
@@ -325,13 +345,15 @@ Two things were missing before these could work at all:
 - **`ExitCode` collides with ArgumentParser's own type**; the CLI's is `ExitStatus`. `CommandError` is not public, so a parse failure is identified by ArgumentParser's own `exitCode(for:)` classification.
 - **A leading `-` cannot start an option's value**: `--sort -updated` parses as a flag. `--reverse` exists because of it; `--sort=-updated` also works.
 - **`$HOME` is ignored by both `FileManager.homeDirectoryForCurrentUser` and `URL.applicationSupportDirectory`** — they read the password database. Smoke tests run with `HOME=/tmp/...` wrote into the real home twice: once a config file, once a whole SQLite database. Both the CLI and `ServerEntryPoint` now resolve `$HOME` first, which is also what makes a throwaway instance possible at all.
+- **UUIDv7 does not order within a millisecond** — its tail is random. `ORDER BY id DESC` on rows created back-to-back returns them arbitrarily, which showed up as a test passing once and failing the next run. Order by a timestamp with the id as a tie-break. This is the *second* time this trap has cost time; the first was a Core ordering test.
 - **`guard case .unknown = value else { throw }` is inverted** — it throws when the value *is* known. `if case .unknown = value { throw }` is what you want, and a test caught it in `user create --role`.
 - **A pty is needed to smoke-test anything interactive**, and `script` cannot allocate one here while `python3 -c` with the program on stdin deadlocks. Test the seam directly instead.
 - **The coverage gate keeps finding missing *positive* paths**, never missing negative ones. This session: no test that an Admin could promote anyone, none for `--project`, `--priority` or `--server`. Write the allow case beside the deny case, every time.
 
 ### Next
 
-1. **`auth token create|list|revoke`** — the last of ticket 11's surface. Needs server endpoints for listing and revoking sessions, which do not exist yet, so it is a server slice before a CLI one. This is also what makes agent tokens mintable, which MCP depends on.
-2. **`issues completion`** for zsh/bash/fish.
-3. **`expand`** server-side, so list views stop costing a second request.
-4. Then the **native apps** (ticket 10, variant C), and **MCP** last.
+1. **`issues completion`** for zsh/bash/fish — the last item in ticket 11's table. ArgumentParser generates these, so it is mostly wiring plus a test that each shell's script is syntactically valid.
+2. **`expand`** server-side, so list views stop costing a second request for assignee names.
+3. Then the **native apps** (ticket 10, variant C), and **MCP** last. MCP now has what it needs: agent tokens are mintable and their authority is fixed and narrower than their owner's.
+
+**The CLI's command surface is otherwise complete** against ticket 11.

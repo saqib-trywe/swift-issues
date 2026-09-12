@@ -221,6 +221,40 @@ public struct AppDatabase: Sendable {
             }
         }
 
+        migrator.registerMigration("v5-session-id") { db in
+            // A public identifier for a token, so `auth token list` and
+            // `auth token revoke` have something to name it by. Deliberately not the
+            // token hash: a public id should never be derived from a secret, and
+            // putting a verifier value in URLs, logs and shell history is poor
+            // hygiene even when it cannot be reversed.
+            try db.alter(table: "session") { t in
+                t.add(column: "id", .text)
+            }
+            // Backfilled rather than left null, so existing sessions are listable and
+            // revocable immediately after an upgrade — otherwise the one token an
+            // admin most wants to revoke is the one they cannot name.
+            try Self.backfill(db)
+            try db.create(index: "session_on_id", on: "session", columns: ["id"], unique: true)
+        }
+
         return migrator
+    }
+
+    /// Gives an id to any session row missing one.
+    ///
+    /// Extracted so the migration's backfill is testable directly: a migration only
+    /// runs on a database that predates it, which is awkward to construct.
+    static func backfill(_ db: Database) throws {
+        for hash in try String.fetchAll(
+            db, sql: "SELECT token_hash FROM session WHERE id IS NULL")
+        {
+            try db.execute(
+                sql: "UPDATE session SET id = ? WHERE token_hash = ?",
+                arguments: [UUIDv7.generate().uuidString, hash])
+        }
+    }
+
+    static func backfillSessionIDs(_ database: AppDatabase) throws {
+        try database.writer.write { try backfill($0) }
     }
 }

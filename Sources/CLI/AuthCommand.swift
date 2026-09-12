@@ -10,7 +10,7 @@ struct AuthCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "auth",
         abstract: "Log in, log out, and check the current session.",
-        subcommands: [Login.self, Logout.self, Status.self]
+        subcommands: [Login.self, Logout.self, Status.self, Token.self]
     )
 
     struct Login: AsyncParsableCommand {
@@ -79,7 +79,7 @@ struct AuthCommand: AsyncParsableCommand {
             // Failing by name beats hanging on a prompt nobody can see, which is
             // what a CI job would otherwise do until its timeout.
             guard context.terminal.isInputTerminal else { throw CLIError.missingInput(flag: "--email") }
-            context.terminal.output.write("Email: ")
+            context.terminal.error.write("Email: ")
             guard let entered = context.terminal.readLine(), !entered.isEmpty else {
                 throw CLIError.missingInput(flag: "--email")
             }
@@ -92,11 +92,11 @@ struct AuthCommand: AsyncParsableCommand {
             guard context.terminal.isInputTerminal else {
                 throw CLIError.missingInput(flag: "ISSUES_TOKEN (there is no password flag, by design)")
             }
-            context.terminal.output.write("Password: ")
+            context.terminal.error.write("Password: ")
             guard let entered = context.terminal.readSecret(), !entered.isEmpty else {
                 throw CLIError.missingInput(flag: "a password")
             }
-            context.terminal.print()
+            context.terminal.error.write("\n")
             return entered
         }
     }

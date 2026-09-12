@@ -663,7 +663,8 @@ struct IssueCommentAndDeleteTests {
                 ["delete", key], isInputTerminal: true, input: ["y"])
 
             #expect(result.code == 0, Comment(rawValue: result.standardError))
-            #expect(result.standardOutput.contains("Needs discussion"))
+            // The title is in the prompt, which is on stderr so stdout stays clean.
+            #expect(result.standardError.contains("Needs discussion"))
             #expect(try IssueRepository(database: world.database).find(issue.id)?.isDeleted == true)
         }
     }
