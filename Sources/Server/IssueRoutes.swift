@@ -11,21 +11,32 @@ struct IssueRoutes: Sendable {
     func register(on group: RouterGroup<AppRequestContext>) {
         group.get("/issues") { request, context in
             let query = request.uri.queryParameters
+            let expansions = try context.expansions(from: query)
+            let page = try repository.list(
+                filter: IssueFilter(query: query),
+                sort: IssueSort(wireValue: query["sort"[...]].map(String.init)),
+                page: Pagination(query: query),
+                resolvingMeAs: context.identity.userId
+            )
+
+            // The expanded shape is strictly additive, so this is the same payload
+            // with extra keys — a client decoding a plain Issue is unaffected.
             return try EditedResponse(
                 status: .ok,
-                response: try repository.list(
-                    filter: IssueFilter(query: query),
-                    sort: IssueSort(wireValue: query["sort"[...]].map(String.init)),
-                    page: Pagination(query: query),
-                    resolvingMeAs: context.identity.userId
-                ))
+                response: Paginated(
+                    items: try IssueExpansion(database: database)
+                        .expand(page.items, with: expansions),
+                    nextCursor: page.nextCursor))
         }
 
         // Accepts a UUID or an Issue Key: humans and agents hold keys, not UUIDs,
         // and without this every CLI and MCP call needs a lookup round trip first.
-        group.get("/issues/:reference") { _, context in
+        group.get("/issues/:reference") { request, context in
             let issue = try resolve(context)
-            return try EditedResponse(status: .ok, response: issue)
+            let expansions = try context.expansions(from: request.uri.queryParameters)
+            let expanded = try IssueExpansion(database: database)
+                .expand([issue], with: expansions)
+            return try EditedResponse(status: .ok, response: expanded[0])
         }
 
         group.put("/issues/:reference") { request, context in

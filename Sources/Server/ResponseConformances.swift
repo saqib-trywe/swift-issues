@@ -14,3 +14,5 @@ extension IssueLabel: ResponseEncodable {}
 extension User: ResponseEncodable {}
 extension ServerMeta: ResponseEncodable {}
 extension Paginated: ResponseEncodable where Item: Codable & Sendable {}
+
+extension ExpandedIssue: ResponseEncodable {}

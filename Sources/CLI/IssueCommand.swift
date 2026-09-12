@@ -85,7 +85,10 @@ struct IssueCommand: AsyncParsableCommand {
                 let pageSize = min(wanted - collected.count, Pagination.maximumLimit)
                 let request = IssueEndpoints.list(
                     filter: filter, sort: order,
-                    page: Pagination(cursor: cursor, limit: pageSize))
+                    page: Pagination(cursor: cursor, limit: pageSize),
+                    // Only for the human table: --json must stay the plain payload a
+                    // script expects, and --quiet needs nothing but keys.
+                    expand: output.format == .table ? [.assignee] : [])
                 let data = try await client.data(for: request)
                 collected.append(contentsOf: try JSONOutput.items(in: data))
                 cursor = (try? JSONSerialization.jsonObject(with: data) as? [String: Any])?
@@ -185,17 +188,16 @@ struct IssueCommand: AsyncParsableCommand {
                     return
                 }
                 let issues = try JSONCoders.decoder.decode(
-                    [Issue].self, from: try JSONSerialization.data(withJSONObject: items))
-                let names = await UserDirectory.resolve(
-                    ids: issues.compactMap(\.assigneeId), client: client)
+                    [ExpandedIssue].self, from: try JSONSerialization.data(withJSONObject: items))
 
                 var table = Table(headers: ["KEY", "STATUS", "PRI", "ASSIGNEE", "TITLE"])
-                for issue in issues {
+                for expanded in issues {
+                    let issue = expanded.issue
                     table.append([
                         issue.key?.wireValue ?? "—",
                         issue.status.wireValue,
                         issue.priority.wireValue,
-                        issue.assigneeId.map { names[$0] ?? "—" } ?? "—",
+                        expanded.assignee?.displayName ?? "—",
                         issue.title.truncated(to: 60),
                     ])
                 }
@@ -217,7 +219,9 @@ struct IssueCommand: AsyncParsableCommand {
             let client = try context.client()
             let reference = try Self.reference(for: issue)
 
-            let data = try await client.data(for: IssueEndpoints.get(reference))
+            let data = try await client.data(
+                for: IssueEndpoints.get(
+                    reference, expand: output.format == .table ? [.assignee, .reporter] : []))
 
             switch output.format {
             case .json:
@@ -226,10 +230,8 @@ struct IssueCommand: AsyncParsableCommand {
                 let issue = try JSONCoders.decoder.decode(Issue.self, from: data)
                 context.terminal.print(issue.key?.wireValue ?? issue.id.rawValue.uuidString)
             case .table:
-                let value = try JSONCoders.decoder.decode(Issue.self, from: data)
-                let names = await UserDirectory.resolve(
-                    ids: [value.reporterId] + [value.assigneeId].compactMap { $0 }, client: client)
-                context.terminal.print(Self.describe(value, names: names))
+                let value = try JSONCoders.decoder.decode(ExpandedIssue.self, from: data)
+                context.terminal.print(Self.describe(value))
             }
         }
 
@@ -242,14 +244,15 @@ struct IssueCommand: AsyncParsableCommand {
             throw ValidationError("'\(input)' is neither an issue key like PROJ-142 nor an issue id.")
         }
 
-        static func describe(_ issue: Issue, names: [User.ID: String]) -> String {
+        static func describe(_ expanded: ExpandedIssue) -> String {
+            let issue = expanded.issue
             var lines = [
                 "\(issue.key?.wireValue ?? issue.id.rawValue.uuidString)  \(issue.title)",
                 "",
                 "Status:    \(issue.status.wireValue)",
                 "Priority:  \(issue.priority.wireValue)",
-                "Reporter:  \(names[issue.reporterId] ?? issue.reporterId.rawValue.uuidString)",
-                "Assignee:  \(issue.assigneeId.map { names[$0] ?? $0.rawValue.uuidString } ?? "unassigned")",
+                "Reporter:  \(expanded.reporter?.displayName ?? issue.reporterId.rawValue.uuidString)",
+                "Assignee:  \(expanded.assignee?.displayName ?? (issue.assigneeId == nil ? "unassigned" : issue.assigneeId!.rawValue.uuidString))",
             ]
             if let due = issue.dueDate { lines.append("Due:       \(due.wireValue)") }
             if issue.via != .human { lines.append("Created by: \(issue.via.wireValue)") }
@@ -263,24 +266,5 @@ struct IssueCommand: AsyncParsableCommand {
             }
             return lines.joined(separator: "\n")
         }
-    }
-}
-
-/// Resolves user ids to display names for human output.
-///
-/// The server does not implement ticket 06's `expand`, so a list would otherwise
-/// print raw UUIDs in the assignee column. One extra request, only for the human
-/// format, and only when something is actually assigned.
-enum UserDirectory {
-    static func resolve(ids: [User.ID], client: APIClient) async -> [User.ID: String] {
-        guard !ids.isEmpty else { return [:] }
-        // A failure here must not fail the command: the ids are already a correct,
-        // if ugly, answer.
-        guard
-            let page = try? await client.send(
-                UserEndpoints.list(page: Pagination(limit: Pagination.maximumLimit)),
-                expecting: Paginated<User>.self)
-        else { return [:] }
-        return Dictionary(uniqueKeysWithValues: page.items.map { ($0.id, $0.displayName) })
     }
 }

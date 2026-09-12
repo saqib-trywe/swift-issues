@@ -428,9 +428,24 @@ Dropped **transitively**, which falls straight out of the derived dependency rul
 
 Tested that unrelated pending work is untouched and still goes out afterwards — the same no-head-of-line-blocking property, in a different guise.
 
+### `expand`, and the N+1 it removes
+
+**981 tests.** Ticket 06 specified it, Core had the `Expansion` type, and no route had ever read the parameter.
+
+**The response shape is strictly additive**: `assigneeId` and `assignee` both appear, side by side. That is what let this be added to a live API with no version change — the CLI's existing `Paginated<Issue>` decode keeps working whether or not expansion is asked for, and there is a test asserting an expanded payload still decodes as a plain `Issue`.
+
+| Decision | Why |
+| --- | --- |
+| Additive keys rather than a wrapper or a sidecar | A wrapper means a client decodes one of two types depending on the request it made; a sidecar means every one of five surfaces joins client-side, which is the opposite of the ergonomics `expand` exists for |
+| **Batched**, four queries whatever the page size | Expansion exists to remove an N+1; resolving it per row would reintroduce the exact problem. Tested by measuring the query count for 1 issue and for 41 and asserting they are **equal** — the absolute number is uninteresting, the growth is the property |
+| An unknown expansion is **refused** | Silently expanding nothing looks identical to a server that does not support the relationship, and the caller cannot tell |
+| `labels: []` ≠ absent | Requested-and-none is a different answer from not-requested, and a client rendering a label row needs both |
+| The CLI expands **only for the human table** | `--json` must stay the plain payload a script expects, and `--quiet` needs nothing but keys |
+
+The CLI's `UserDirectory` — a second request per list, added when the server could not expand — is now deleted.
+
 ### Open gaps
 
-- **`expand` is not implemented server-side.** Ticket 06 specifies it and `Expansion` exists in Core, but no route reads the parameter. The CLI resolves assignee names with a second request instead; a list view in the apps will want the real thing.
 - **Four unreachable defensive lines in Core are uncovered**, which is why the baseline moved from 99.29% to 99.07%: three `default: nil` folds that a per-entity slot can never reach, and the cycle fallback in the topological sort, which this domain cannot produce. The fallback emits the queue head rather than stopping, because silently dropping operations is the one outcome ADR 0004 forbids.
 - **The server's SQLite files are `0644` inside a `0700` directory.** Protection is directory-level by design, but a file moved or copied out of it carries no protection of its own. Worth a `chmod` after open.
 - **`.issues.toml` may not set `url`** — a repository-controlled file that could retarget the CLI at another host would make `git clone` enough to redirect traffic. Refused explicitly, and tested.
@@ -450,8 +465,7 @@ Tested that unrelated pending work is untouched and still goes out afterwards �
 
 ### Next
 
-**Ticket 05 is complete**, and with it the whole non-UI half of the client.
+**Everything except the two UI surfaces is built**: Core, server, CLI and the client sync engine, with ticket 06's contract now complete.
 
-1. **`expand`** server-side (ticket 06) — specified, never implemented, and the reason the CLI resolves assignee names with a second request. The apps will want it for list views.
-2. The **apps** (ticket 10, variant C): a separate Xcode workspace over `ClientStore`, with `ValueObservation` wrapped in an `@Observable` type. The sync protocol is proven end to end, so what remains there is genuinely UI work.
-3. **MCP** last.
+1. The **apps** (ticket 10, variant C): a separate Xcode workspace over `ClientStore`, with `ValueObservation` wrapped in an `@Observable` type per ADR 0008. The sync protocol is proven end to end and `expand` removes the list N+1, so what remains is genuinely UI work.
+2. **MCP** last. It has what it needs: agent tokens are mintable and an agent's authority is fixed and narrower than its owner's.

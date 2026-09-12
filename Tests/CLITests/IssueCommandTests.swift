@@ -447,3 +447,82 @@ struct IssueListOptionTests {
         }
     }
 }
+
+@Suite("issue reads use expansion")
+struct IssueExpansionUseTests {
+
+    /// The payoff for implementing expand: the table shows names without the CLI
+    /// fetching every user separately.
+    @Test("the list table shows assignee names")
+    func listTableShowsAssigneeNames() async throws {
+        try await withCLI { world in
+            try world.authenticate()
+            _ = try IssueRepository(database: world.database).create(
+                DomainIssue.fixture(
+                    key: nil, projectId: world.project.id, title: "Assigned",
+                    reporterId: world.owner.id, assigneeId: world.owner.id))
+
+            let result = await world.run(["list"])
+
+            #expect(result.code == 0, Comment(rawValue: result.standardError))
+            #expect(result.standardOutput.contains("Saqib"))
+        }
+    }
+
+    @Test("show displays reporter and assignee names")
+    func showDisplaysNames() async throws {
+        try await withCLI { world in
+            try world.authenticate()
+            let issue = try IssueRepository(database: world.database).create(
+                DomainIssue.fixture(
+                    key: nil, projectId: world.project.id, title: "Assigned",
+                    reporterId: world.owner.id, assigneeId: world.owner.id))
+
+            let result = await world.run(["show", try #require(issue.key).wireValue])
+
+            #expect(result.code == 0, Comment(rawValue: result.standardError))
+            #expect(result.standardOutput.contains("Reporter:  Saqib"))
+            #expect(result.standardOutput.contains("Assignee:  Saqib"))
+        }
+    }
+
+    @Test("an unassigned issue still reads clearly")
+    func unassignedIssueStillReadsClearly() async throws {
+        try await withCLI { world in
+            try world.authenticate()
+            let issue = try IssueRepository(database: world.database).create(
+                DomainIssue.fixture(
+                    key: nil, projectId: world.project.id, title: "Nobody's",
+                    reporterId: world.owner.id, assigneeId: nil))
+
+            let result = await world.run(["show", try #require(issue.key).wireValue])
+            #expect(result.standardOutput.contains("Assignee:  unassigned"))
+        }
+    }
+
+    /// `--json` must stay the plain payload a script expects, so expansion is asked
+    /// for only when rendering the human table.
+    @Test("--json is not expanded")
+    func jsonIsNotExpanded() async throws {
+        try await withCLI { world in
+            try world.authenticate()
+            _ = try IssueRepository(database: world.database).create(
+                DomainIssue.fixture(
+                    key: nil, projectId: world.project.id, title: "Assigned",
+                    reporterId: world.owner.id, assigneeId: world.owner.id))
+
+            let listed = await world.run(["list", "--json"])
+            let items = try #require(
+                try JSONSerialization.jsonObject(with: Data(listed.standardOutput.utf8))
+                    as? [[String: Any]])
+            #expect(items[0]["assignee"] == nil)
+            #expect(items[0]["assigneeId"] != nil)
+
+            let shown = await world.run(["show", "PROJ-1", "--json"])
+            let object = try #require(
+                try JSONSerialization.jsonObject(with: Data(shown.standardOutput.utf8))
+                    as? [String: Any])
+            #expect(object["assignee"] == nil)
+        }
+    }
+}
