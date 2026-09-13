@@ -18,7 +18,11 @@ struct PreviewApp: App {
         // invisible to it — the replica is the one thing that can be reached.
         if CommandLine.arguments.contains("--seed") {
             do {
-                try Fixtures.seedContainerReplica()
+                // An explicit path targets a simulator's container instead.
+                let explicit = CommandLine.arguments.dropFirst()
+                    .first { $0.hasPrefix("/") }
+                    .map { URL(fileURLWithPath: $0) }
+                try Fixtures.seedContainerReplica(at: explicit)
                 print("seeded")
             } catch {
                 print("seeding failed: \(error)")

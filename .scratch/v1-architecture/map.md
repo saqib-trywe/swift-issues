@@ -560,6 +560,19 @@ The load-bearing piece is `IssueDraft.patch(against:)`, which records **only the
 
 **A sandboxed app cannot be seeded from outside.** Its `UserDefaults` and Keychain live in its container, so `defaults write` and `security add-generic-password` are invisible to it — the app showed "Add a server in Settings to begin" despite both being set. The replica is the one thing reachable, so `issues-preview --seed` fills it directly. Worth knowing before anyone tries to script a login.
 
+### The iPhone and iPad shells
+
+**One target for both**, because ticket 10's divergence is layout, not behaviour. The **size class** decides, not the device: an iPad in a narrow split window is a compact layout, and an iPhone in landscape is not a desktop.
+
+- **iPhone** — `NavigationStack` of `IssueRowContent` cards, and a tab bar whose **Inbox carries the needs-attention badge**. Ticket 10 asks for the tab bar specifically so that count has somewhere to live; buried behind a scroll, a guarantee nobody can see is not a guarantee.
+- **iPad** — the Mac's two-column composition at touch sizes, as ticket 10 requires. It does **not** get the Mac's token and session administration.
+
+**Verified in both simulators**, seeded and with no server: the offline-created issue shows its dirty dot and `PLAT-•` placeholder, and the footer reads "1 change waiting to send". Screenshots: [iphone.png](../preview/iphone.png), [ipad.png](../preview/ipad.png).
+
+The iPad screenshot found a real gap first time round: **sync state was not visible there at all.** The phone carried it in the list footer and the iPad had nothing — so a device with unsent work looked identical to one fully synced. Fixed, and the second screenshot confirms it.
+
+**Seeding a simulator works where seeding the Mac app did not.** `simctl get_app_container` gives the path directly, so `issues-preview --seed <path>` fills the replica — the same trick as the Mac, but without the sandbox getting in the way of finding the container.
+
 ### Open gaps
 
 - **Four unreachable defensive lines in Core are uncovered**, which is why the baseline moved from 99.29% to 99.07%: three `default: nil` folds that a per-entity slot can never reach, and the cycle fallback in the topological sort, which this domain cannot produce. The fallback emits the queue head rather than stopping, because silently dropping operations is the one outcome ADR 0004 forbids.
@@ -585,5 +598,6 @@ The load-bearing piece is `IssueDraft.patch(against:)`, which records **only the
 
 ### Next
 
-1. **iPhone and iPad shells** — `NavigationStack` with a badged Inbox, and the Mac composition at touch sizes. The shared layer is complete, so these are composition only.
-2. **MCP** last. It has what it needs: agent tokens are mintable and an agent's authority is fixed and narrower than its owner's.
+**All five surfaces now exist** — server, CLI, macOS, iPhone/iPad, with MCP remaining.
+
+1. **MCP** — the last surface. It has what it needs: agent tokens are mintable, and an agent's authority is fixed and narrower than its owner's (ADR 0007). Ticket 12 specifies stdio transport, a local process reusing the CLI's credential conventions, and list tools returning a compact projection rather than raw payloads, because agents have a hard context budget that CLI users do not.

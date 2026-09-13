@@ -12,6 +12,11 @@
 		A100000B000000000000000A /* ClientStore in Frameworks */ = {isa = PBXBuildFile; productRef = A1000010000000000000000A /* ClientStore */; };
 		A100000C000000000000000A /* Core in Frameworks */ = {isa = PBXBuildFile; productRef = A1000011000000000000000A /* Core */; };
 		A1000019000000000000000A /* Credentials in Frameworks */ = {isa = PBXBuildFile; productRef = A100001A000000000000000A /* Credentials */; };
+		B1000001000000000000000A /* AppCore in Frameworks */ = {isa = PBXBuildFile; productRef = B1000010000000000000000A /* AppCore */; };
+		B1000002000000000000000A /* AppViews in Frameworks */ = {isa = PBXBuildFile; productRef = B1000011000000000000000A /* AppViews */; };
+		B1000003000000000000000A /* ClientStore in Frameworks */ = {isa = PBXBuildFile; productRef = B1000012000000000000000A /* ClientStore */; };
+		B1000004000000000000000A /* Core in Frameworks */ = {isa = PBXBuildFile; productRef = B1000013000000000000000A /* Core */; };
+		B1000005000000000000000A /* Credentials in Frameworks */ = {isa = PBXBuildFile; productRef = B1000014000000000000000A /* Credentials */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -19,6 +24,11 @@
 			isa = PBXFileSystemSynchronizedRootGroup;
 			/* Relative to the .xcodeproj's parent directory, not to the project file. */
 			path = Issues/Sources;
+			sourceTree = "<group>";
+		};
+		B1000006000000000000000A /* Sources */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = IssuesMobile/Sources;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -36,6 +46,18 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		B1000007000000000000000A /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B1000001000000000000000A /* AppCore in Frameworks */,
+				B1000002000000000000000A /* AppViews in Frameworks */,
+				B1000003000000000000000A /* ClientStore in Frameworks */,
+				B1000004000000000000000A /* Core in Frameworks */,
+				B1000005000000000000000A /* Credentials in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -43,6 +65,7 @@
 			isa = PBXGroup;
 			children = (
 				A1000001000000000000000A /* Sources */,
+				B1000006000000000000000A /* Sources */,
 				A1000004000000000000000A /* Products */,
 			);
 			sourceTree = "<group>";
@@ -51,6 +74,7 @@
 			isa = PBXGroup;
 			children = (
 				A1000005000000000000000A /* Issues.app */,
+				B1000008000000000000000A /* IssuesMobile.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -83,6 +107,33 @@
 			);
 			productName = Issues;
 			productReference = A1000005000000000000000A /* Issues.app */;
+			productType = "com.apple.product-type.application";
+		};
+		B100000B000000000000000A /* IssuesMobile */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B100000C000000000000000A /* Build configuration list for PBXNativeTarget "IssuesMobile" */;
+			buildPhases = (
+				B1000009000000000000000A /* Sources */,
+				B1000007000000000000000A /* Frameworks */,
+				B100000A000000000000000A /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				B1000006000000000000000A /* Sources */,
+			);
+			name = IssuesMobile;
+			packageProductDependencies = (
+				B1000010000000000000000A /* AppCore */,
+				B1000011000000000000000A /* AppViews */,
+				B1000012000000000000000A /* ClientStore */,
+				B1000013000000000000000A /* Core */,
+				B1000014000000000000000A /* Credentials */,
+			);
+			productName = IssuesMobile;
+			productReference = B1000008000000000000000A /* IssuesMobile.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -118,12 +169,20 @@
 			projectRoot = "";
 			targets = (
 				A1000006000000000000000A /* Issues */,
+				B100000B000000000000000A /* IssuesMobile */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		A100000D000000000000000A /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B100000A000000000000000A /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -140,6 +199,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		B1000009000000000000000A /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXFileReference section */
@@ -148,6 +214,13 @@
 			explicitFileType = wrapper.application;
 			includeInIndex = 0;
 			path = Issues.app;
+			sourceTree = BUILT_PRODUCTS_DIR;
+		};
+		B1000008000000000000000A /* IssuesMobile.app */ = {
+			isa = PBXFileReference;
+			explicitFileType = wrapper.application;
+			includeInIndex = 0;
+			path = IssuesMobile.app;
 			sourceTree = BUILT_PRODUCTS_DIR;
 		};
 /* End PBXFileReference section */
@@ -236,6 +309,58 @@
 			};
 			name = Release;
 		};
+		B100000D000000000000000A /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = co.trywe.issues.mobile;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		B100000E000000000000000A /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = co.trywe.issues.mobile;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -253,6 +378,15 @@
 			buildConfigurations = (
 				A1000017000000000000000A /* Debug */,
 				A1000018000000000000000A /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		B100000C000000000000000A /* Build configuration list for PBXNativeTarget "IssuesMobile" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B100000D000000000000000A /* Debug */,
+				B100000E000000000000000A /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
@@ -284,6 +418,26 @@
 			productName = Core;
 		};
 		A100001A000000000000000A /* Credentials */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = Credentials;
+		};
+		B1000010000000000000000A /* AppCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = AppCore;
+		};
+		B1000011000000000000000A /* AppViews */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = AppViews;
+		};
+		B1000012000000000000000A /* ClientStore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = ClientStore;
+		};
+		B1000013000000000000000A /* Core */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = Core;
+		};
+		B1000014000000000000000A /* Credentials */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = Credentials;
 		};

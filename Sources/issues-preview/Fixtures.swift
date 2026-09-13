@@ -8,10 +8,21 @@ import TestSupport
 /// Sample data for the gallery. Nothing here is used by the apps.
 enum Fixtures {
 
-    /// Fills the Mac app's replica with something to look at.
-    static func seedContainerReplica() throws {
-        let container = FileManager.default.homeDirectoryForCurrentUser
-            .appending(path: "Library/Containers/co.trywe.issues/Data/Library/Application Support/Issues")
+    /// Fills a replica with something to look at.
+    ///
+    /// Takes the directory so it can target the Mac app's sandbox container or a
+    /// simulator's — a sandboxed app reads its preferences and Keychain from its
+    /// own container, so the replica is the one thing reachable from outside.
+    static func seedContainerReplica(at directory: URL? = nil) throws {
+        if let directory { try seed(into: directory); return }
+        try seed(
+            into: FileManager.default.homeDirectoryForCurrentUser
+                .appending(
+                    path: "Library/Containers/co.trywe.issues/Data/Library/Application Support/Issues"
+                ))
+    }
+
+    private static func seed(into container: URL) throws {
         try FileManager.default.createDirectory(at: container, withIntermediateDirectories: true)
 
         let database = try ReplicaDatabase.open(at: container.appending(path: "replica.sqlite"))
