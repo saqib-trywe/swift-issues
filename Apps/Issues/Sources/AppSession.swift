@@ -1,6 +1,7 @@
 import AppCore
 import ClientStore
 import Core
+import Credentials
 import Foundation
 import Observation
 import SwiftUI
@@ -51,6 +52,43 @@ final class AppSession {
     }
 
     var isConfigured: Bool { !serverURL.isEmpty && !(token ?? "").isEmpty }
+
+    /// A token model bound to the current connection, or nil when there is none.
+    func makeTokenModel() -> TokenListModel? {
+        guard let url = URL(string: serverURL), let token, !token.isEmpty else { return nil }
+        return TokenListModel(
+            client: APIClient(transport: URLSessionTransport(baseURL: url), token: { token }))
+    }
+
+    /// What signing out would cost right now.
+    var logoutPlan: LogoutPlan {
+        LogoutPlan(status: list?.status ?? SyncStatus())
+    }
+
+    /// Signs out and removes the local copy.
+    ///
+    /// Ticket 07 is explicit that logout clears the replica; anything unsent goes
+    /// with it, which is why the confirmation names the count first.
+    func signOut() {
+        list?.stopObserving()
+        list = nil
+        engine = nil
+        try? credentials.remove(forServer: serverURL)
+        if let url = try? Self.databaseURL() {
+            try? FileManager.default.removeItem(at: url)
+            // The write-ahead log and shared memory are separate files; leaving them
+            // behind would resurrect part of the replica on next open.
+            for suffix in ["-wal", "-shm"] {
+                try? FileManager.default.removeItem(
+                    at: url.deletingLastPathComponent()
+                        .appending(path: url.lastPathComponent + suffix))
+            }
+        }
+        projects = []
+        selectedProject = nil
+        selectedIssue = nil
+        Task { await start() }
+    }
 
     func start() async {
         guard list == nil else { return }

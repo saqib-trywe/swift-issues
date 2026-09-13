@@ -13,6 +13,8 @@ struct ContentView: View {
     @Bindable var session: AppSession
     @State private var sortOrder = [KeyPathComparator(\IssueRow.title)]
     @State private var search = ""
+    @State private var isSigningOut = false
+    @State private var showsTokens = false
 
     var body: some View {
         NavigationSplitView {
@@ -29,6 +31,14 @@ struct ContentView: View {
             }
         }
         .searchable(text: $search, prompt: "Filter issues")
+        .sheet(isPresented: $showsTokens) {
+            TokensView(session: session).frame(width: 720, height: 420)
+        }
+        .signOutConfirmation(
+            isPresented: $isSigningOut,
+            plan: session.logoutPlan,
+            syncFirst: { await session.sync() },
+            signOut: { session.signOut() })
     }
 
     private var sidebar: some View {
@@ -78,6 +88,16 @@ struct ContentView: View {
                     Task { await session.sync() }
                 } label: {
                     Label("Sync", systemImage: "arrow.triangle.2.circlepath")
+                }
+                .disabled(!session.isConfigured)
+            }
+            ToolbarItem {
+                Menu {
+                    Button("Tokens…") { showsTokens = true }
+                    Divider()
+                    Button("Sign Out…") { isSigningOut = true }
+                } label: {
+                    Label("Account", systemImage: "person.crop.circle")
                 }
                 .disabled(!session.isConfigured)
             }

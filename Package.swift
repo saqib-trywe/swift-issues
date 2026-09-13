@@ -114,6 +114,18 @@ let package = Package(
             dependencies: ["AppViews", "AppCore", "Core", "ClientStore", "TestSupport"],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
+        // Dispatches a Core `HTTPRequest` into the real router, so client tests run
+        // against real routing and persistence rather than canned responses. Its own
+        // target because three test suites need it, and putting it in `TestSupport`
+        // would make `CoreTests` link the whole server.
+        .target(
+            name: "ServerTestSupport",
+            dependencies: [
+                "Core", "Server",
+                .product(name: "HummingbirdTesting", package: "hummingbird"),
+            ],
+            swiftSettings: [.swiftLanguageMode(.v6)]
+        ),
         // Entity builders. Linked only by test targets, never shipped. Ticket 13.
         .target(
             name: "TestSupport",
@@ -133,7 +145,7 @@ let package = Package(
         .testTarget(
             name: "CLITests",
             dependencies: [
-                "CLI", "Core", "Server", "TestSupport",
+                "CLI", "Core", "Server", "TestSupport", "ServerTestSupport",
                 .product(name: "HummingbirdTesting", package: "hummingbird"),
             ],
             swiftSettings: [.swiftLanguageMode(.v6)]
@@ -143,14 +155,21 @@ let package = Package(
         .testTarget(
             name: "ClientStoreTests",
             dependencies: [
-                "ClientStore", "Core", "Server", "TestSupport",
+                "ClientStore", "Core", "Server", "TestSupport", "ServerTestSupport",
                 .product(name: "HummingbirdTesting", package: "hummingbird"),
             ],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
+        // Depends on `Server` so the token model runs against the real router,
+        // exactly as the CLI and client-store suites do.
         .testTarget(
             name: "AppCoreTests",
-            dependencies: ["AppViews", "AppCore", "Core", "ClientStore", "TestSupport"],
+            dependencies: [
+                "AppViews", "AppCore", "Core", "ClientStore", "Credentials",
+                "TestSupport", "Server", "ServerTestSupport",
+                .product(name: "Hummingbird", package: "hummingbird"),
+                .product(name: "HummingbirdTesting", package: "hummingbird"),
+            ],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
         .testTarget(

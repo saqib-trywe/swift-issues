@@ -11,6 +11,7 @@
 		A100000A000000000000000A /* AppViews in Frameworks */ = {isa = PBXBuildFile; productRef = A100000F000000000000000A /* AppViews */; };
 		A100000B000000000000000A /* ClientStore in Frameworks */ = {isa = PBXBuildFile; productRef = A1000010000000000000000A /* ClientStore */; };
 		A100000C000000000000000A /* Core in Frameworks */ = {isa = PBXBuildFile; productRef = A1000011000000000000000A /* Core */; };
+		A1000019000000000000000A /* Credentials in Frameworks */ = {isa = PBXBuildFile; productRef = A100001A000000000000000A /* Credentials */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -31,6 +32,7 @@
 				A100000A000000000000000A /* AppViews in Frameworks */,
 				A100000B000000000000000A /* ClientStore in Frameworks */,
 				A100000C000000000000000A /* Core in Frameworks */,
+				A1000019000000000000000A /* Credentials in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -77,6 +79,7 @@
 				A100000F000000000000000A /* AppViews */,
 				A1000010000000000000000A /* ClientStore */,
 				A1000011000000000000000A /* Core */,
+				A100001A000000000000000A /* Credentials */,
 			);
 			productName = Issues;
 			productReference = A1000005000000000000000A /* Issues.app */;
@@ -279,6 +282,10 @@
 		A1000011000000000000000A /* Core */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = Core;
+		};
+		A100001A000000000000000A /* Credentials */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = Credentials;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

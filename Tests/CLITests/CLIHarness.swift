@@ -5,52 +5,12 @@ import HTTPTypes
 import Hummingbird
 import HummingbirdTesting
 import NIOCore
+import ServerTestSupport
 import Synchronization
 import TestSupport
 
 @testable import CLI
 @testable import Server
-
-/// Dispatches a Core `HTTPRequest` straight into the real router.
-///
-/// This is why CLI tests are worth having: the commands run against real
-/// routing, real authentication and a real database, with no socket and no
-/// canned responses. A contract change that breaks the CLI fails here rather
-/// than in a SwiftUI view months later.
-struct RouterTransport: HTTPTransport {
-    let client: any TestClientProtocol
-
-    func send(_ request: Core.HTTPRequest) async throws -> Core.HTTPResponse {
-        var components = URLComponents()
-        components.path = request.path
-        if !request.query.isEmpty {
-            components.queryItems = request.query.map { URLQueryItem(name: $0.name, value: $0.value) }
-        }
-        // `URLComponents` is what the real transport uses, so encoding bugs show
-        // up here too rather than only in production.
-        let uri = components.string ?? request.path
-
-        var headers = HTTPFields()
-        for (name, value) in request.headers {
-            guard let field = HTTPField.Name(name) else { continue }
-            headers[field] = value
-        }
-
-        return try await client.execute(
-            uri: uri,
-            method: .init(rawValue: request.method) ?? .get,
-            headers: headers,
-            body: request.body.map { ByteBuffer(data: $0) }
-        ) { response in
-            var received: [String: String] = [:]
-            for field in response.headers { received[field.name.canonicalName] = field.value }
-            return Core.HTTPResponse(
-                status: Int(response.status.code),
-                headers: received,
-                body: Data(buffer: response.body))
-        }
-    }
-}
 
 /// Collects written text so output can be asserted.
 final class RecordingSink: TextSink {

@@ -525,9 +525,28 @@ Also confirmed: with the token revoked the **replica still showed every issue** 
 
 **`Credentials` is now its own target.** Moving the store from the CLI into `Core` so the Mac app could use it dropped Core from 99.09% to 96.16%, because the Keychain implementation cannot run in CI — it depends on the login keychain's lock state, which on a hosted runner can prompt and hang. Folding that into Core would have meant lowering the bar on the most critical module in the project to suit the one piece that cannot be measured. Its own target, floor 40, keeps both honest — and the CLI rose to 95.28% once it stopped carrying the same code.
 
+### The Mac's administration surfaces
+
+**1,095 tests. AppCore 97.42%.** Token management and the sign-out warning — the Mac carries them because there is no web UI (ticket 07).
+
+`TokenListModel` is tested **against the real router**: minting yields a token that actually authenticates, revoking stops it working, a wrong password mints nothing, and an Admin can list somebody else's tokens while a Member cannot.
+
+| Decision | Why |
+| --- | --- |
+| The raw token lives in `justMinted` and is **cleared on dismiss** | It exists once — the server keeps only a hash — so the UI must show it, and then stop being somewhere it can be read |
+| Each kind states **what it cannot do** | Ticket 12 requires the interface to make plain that an agent holds less authority than its owner; ADR 0007 fixes that profile, and an Admin's agent is not an admin |
+| Minting asks for the password **in the app too** | The server requires it, and the sheet says why: it confirms it is you, not just this device |
+| `LogoutPlan` names the count, offers **Sync First**, and labels the button "Discard and Sign Out" | Logout clears the replica. A button saying "Sign Out" beside a warning about losing work is how people lose work |
+| Sign-out removes the **`-wal` and `-shm`** files too | Leaving them would resurrect part of the replica on next open |
+
+`ServerTestSupport` now holds the in-process `RouterTransport`, which three suites were about to duplicate. Its own target rather than `TestSupport`, which would have made `CoreTests` link the whole server.
+
+**Limit worth stating: the token UI itself is compile-verified only.** Seeding the app's Keychain entry to launch it triggered a system authorisation prompt that cannot be answered from here — the same hazard that keeps `KeychainTests` out of CI. The model beneath it is fully tested; the views are not.
+
 ### Open gaps
 
 - **Four unreachable defensive lines in Core are uncovered**, which is why the baseline moved from 99.29% to 99.07%: three `default: nil` folds that a per-entity slot can never reach, and the cycle fallback in the topological sort, which this domain cannot produce. The fallback emits the queue head rather than stopping, because silently dropping operations is the one outcome ADR 0004 forbids.
+- **The token and sign-out views are unverified visually.** Launching the app needs a Keychain entry, and seeding one from a script prompts for authorisation. Worth a look when the app is next run by hand.
 - **The `via` badge may be too subtle.** Ticket 12 wants attribution legible "at a glance"; it is currently a small secondary-tinted glyph. Visible in the gallery screenshot — worth a look before the app shells fix the layout around it.
 - **The server's SQLite files are `0644` inside a `0700` directory.** Protection is directory-level by design, but a file moved or copied out of it carries no protection of its own. Worth a `chmod` after open.
 - **`.issues.toml` may not set `url`** — a repository-controlled file that could retarget the CLI at another host would make `git clone` enough to redirect traffic. Refused explicitly, and tested.
@@ -548,7 +567,6 @@ Also confirmed: with the token revoked the **replica still showed every issue** 
 
 ### Next
 
-1. **The Mac's administration surfaces** — token management (create, label, list, revoke, last-used, the `agent` kinds, and an Admin view of others') and the device/session list. There is no web UI, so the Mac carries them (ticket 07).
-2. **Writes from the app**: create, edit and comment, going through the offline queue.
-3. **iPhone and iPad shells** — `NavigationStack` with a badged Inbox, and the Mac composition at touch sizes.
-4. **MCP** last.
+1. **Writes from the app** — create, edit and comment, going through the offline queue. The engine and overlay are proven; this is wiring plus a form.
+2. **iPhone and iPad shells** — `NavigationStack` with a badged Inbox, and the Mac composition at touch sizes.
+3. **MCP** last.
