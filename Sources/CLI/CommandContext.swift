@@ -1,4 +1,5 @@
 import Core
+import Credentials
 import Foundation
 
 /// Everything a command needs from the outside world, as one injectable value.

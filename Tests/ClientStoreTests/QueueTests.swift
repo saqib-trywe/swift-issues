@@ -718,3 +718,48 @@ struct ApplyPulledChangesTests {
         #expect(try database.allOperations().count == 1)
     }
 }
+
+@Suite("Replica reads for the apps")
+struct ReplicaReadTests {
+
+    private let watermark = Watermark(epoch: "e1", sequence: 1)!
+
+    @Test("projects come back in key order")
+    func projectsComeBackInKeyOrder() throws {
+        let database = try ReplicaDatabase.inMemory()
+        let web = Project.fixture(id: Project.ID(), key: ProjectKey("WEB")!, name: "Website")
+        let plat = Project.fixture(id: Project.ID(), key: ProjectKey("PLAT")!, name: "Platform")
+
+        try database.apply(
+            [web, plat].map {
+                SyncChange(entity: .project, id: $0.id.rawValue, deleted: false, record: .project($0))
+            },
+            upTo: watermark)
+
+        #expect(try database.projects().map(\.key.wireValue) == ["PLAT", "WEB"])
+    }
+
+    /// Archiving hides a project without deleting anything, so the default list
+    /// leaves it out while it remains reachable.
+    @Test("an archived project is hidden unless asked for")
+    func archivedProjectIsHiddenUnlessAskedFor() throws {
+        let database = try ReplicaDatabase.inMemory()
+        var archived = Project.fixture(key: ProjectKey("OLD")!, name: "Retired")
+        archived.archived = true
+
+        try database.apply(
+            [
+                SyncChange(
+                    entity: .project, id: archived.id.rawValue, deleted: false,
+                    record: .project(archived))
+            ], upTo: watermark)
+
+        #expect(try database.projects().isEmpty)
+        #expect(try database.projects(includingArchived: true).count == 1)
+    }
+
+    @Test("an empty replica has no projects")
+    func emptyReplicaHasNoProjects() throws {
+        #expect(try ReplicaDatabase.inMemory().projects().isEmpty)
+    }
+}

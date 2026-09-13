@@ -508,6 +508,23 @@ Verified in the gallery: a heading, a numbered list keeping its numbers, bold in
 
 AppCore's baseline moved 97.36% → 96.97%: what is now uncovered is four defensive branches in the splitter that Foundation's parser does not reach — a parse failure that `returnPartiallyParsedIfPossible` prevents, a run with no presentation intent, and the leading-newline trim.
 
+### The macOS app: a shell that actually runs
+
+**1,079 tests.** `Apps/Issues.xcodeproj` — a hand-written project using **`PBXFileSystemSynchronizedRootGroup`** (Xcode 16+), so it references a folder rather than listing every file: adding a Swift source needs no project edit, which was the historical reason hand-written pbxproj was miserable. No generator tool, nothing new for CI.
+
+Two traps worth knowing: the synchronized group's `path` is relative to the **`.xcodeproj`'s parent**, not the project file (a wrong path fails as an undefined `_main`, which reads like a missing `@main`); and pbxproj takes `/* */` comments only — a `#` makes Xcode refuse to open it.
+
+**Verified running against a real server**, not fixtures: the project synced into the sidebar, four issues into the sortable `Table`, and the status bar read "Up to date with the server". Screenshot: [../preview/macos-app.png](../preview/macos-app.png).
+
+**Two faults only running it could have found:**
+
+1. **The status bar said "Up to date with the server" beside a "Sign in again" banner.** Nothing had synced — the credential was revoked. That is precisely ticket 10's "never imply data is current" rule being broken, and no unit test was asking the question. `progressDescription` now refuses to claim currency without a working credential, with tests.
+2. The `Title` column was squeezed to the width of `Status` and truncated, because `Table` splits leftover width evenly unless told otherwise.
+
+Also confirmed: with the token revoked the **replica still showed every issue** — the app is usable signed out, which is the whole point of holding one.
+
+**`Credentials` is now its own target.** Moving the store from the CLI into `Core` so the Mac app could use it dropped Core from 99.09% to 96.16%, because the Keychain implementation cannot run in CI — it depends on the login keychain's lock state, which on a hosted runner can prompt and hang. Folding that into Core would have meant lowering the bar on the most critical module in the project to suit the one piece that cannot be measured. Its own target, floor 40, keeps both honest — and the CLI rose to 95.28% once it stopped carrying the same code.
+
 ### Open gaps
 
 - **Four unreachable defensive lines in Core are uncovered**, which is why the baseline moved from 99.29% to 99.07%: three `default: nil` folds that a per-entity slot can never reach, and the cycle fallback in the topological sort, which this domain cannot produce. The fallback emits the queue head rather than stopping, because silently dropping operations is the one outcome ADR 0004 forbids.
@@ -531,7 +548,7 @@ AppCore's baseline moved 97.36% → 96.97%: what is now uncovered is four defens
 
 ### Next
 
-**The shared layer is complete**: models, the five sync surfaces, atoms, row and detail.
-
-1. **The app shells** — an Xcode project with the macOS composition (`NavigationSplitView`, sortable `Table`, keyboard-first, plus the Mac-only token and session administration) and the iPhone/iPad ones. The first work that cannot be verified from `swift test`.
-2. **MCP** last.
+1. **The Mac's administration surfaces** — token management (create, label, list, revoke, last-used, the `agent` kinds, and an Admin view of others') and the device/session list. There is no web UI, so the Mac carries them (ticket 07).
+2. **Writes from the app**: create, edit and comment, going through the offline queue.
+3. **iPhone and iPad shells** — `NavigationStack` with a badged Inbox, and the Mac composition at touch sizes.
+4. **MCP** last.

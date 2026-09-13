@@ -281,3 +281,47 @@ struct IssueListModelTests {
         model.stopObserving()
     }
 }
+
+@MainActor
+@Suite("Sync state on the model")
+struct ModelSyncStateTests {
+
+    /// No query can see whether a sync is in flight, so the engine writes it on.
+    @Test("progress is set from outside and survives a reload")
+    func progressIsSetFromOutsideAndSurvivesAReload() throws {
+        let database = try ReplicaDatabase.inMemory()
+        let model = IssueListModel(database: database)
+
+        model.setProgress(.syncing)
+        #expect(model.status.progress == .syncing)
+
+        // A reload re-derives the queue-backed surfaces but must not discard what
+        // only the engine knows.
+        model.reload()
+        #expect(model.status.progress == .syncing)
+    }
+
+    @Test("authentication state is set from outside and survives a reload")
+    func authenticationSurvivesAReload() throws {
+        let database = try ReplicaDatabase.inMemory()
+        let model = IssueListModel(database: database)
+
+        model.setAuthentication(.needsReauthentication)
+        model.reload()
+
+        #expect(model.status.authentication == .needsReauthentication)
+        #expect(model.status.surfaces.contains(.needsReauthentication))
+    }
+
+    /// The bug found by looking at the running app, now guarded at the model.
+    @Test("a signed-out model does not claim to be up to date")
+    func signedOutModelDoesNotClaimToBeUpToDate() throws {
+        let database = try ReplicaDatabase.inMemory()
+        let model = IssueListModel(database: database)
+
+        model.setAuthentication(.needsReauthentication)
+        model.reload()
+
+        #expect(!model.status.progressDescription.lowercased().contains("up to date"))
+    }
+}

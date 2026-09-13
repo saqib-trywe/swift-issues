@@ -1,7 +1,8 @@
 {
-  "AppCore": 96.97,
-  "CLI": 92.93,
-  "ClientStore": 99.58,
+  "AppCore": 97.07,
+  "CLI": 95.28,
+  "ClientStore": 99.59,
   "Core": 99.09,
+  "Credentials": 45.87,
   "Server": 98.41
 }

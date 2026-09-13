@@ -5,7 +5,16 @@ import Security
 ///
 /// Keyed by server URL throughout, so pointing at a test instance cannot clobber
 /// the credential for a real one (ticket 11).
-protocol CredentialStore: Sendable {
+///
+/// Its own target, shared by the CLI and the Mac app — both need it, and it is the
+/// primary place tokens are minted (ticket 07).
+///
+/// Separate from `Core` because the Keychain implementation cannot run in CI: it
+/// depends on the login keychain's lock state, which on a hosted runner can prompt
+/// and hang. Leaving it in `Core` dragged that module's coverage down by three
+/// points and would have meant lowering the bar on the most critical code in the
+/// project to accommodate the one piece that cannot be measured.
+public protocol CredentialStore: Sendable {
     func token(forServer server: String) throws -> String?
     func store(_ token: String, forServer server: String) throws
     func remove(forServer server: String) throws
@@ -16,10 +25,10 @@ protocol CredentialStore: Sendable {
 /// Not exercised in CI: `SecItem` access depends on the login keychain's lock
 /// state, which on a hosted runner can prompt and then hang the job until the
 /// timeout. `KeychainTests` runs only when `ISSUES_TEST_KEYCHAIN` is set.
-struct KeychainCredentialStore: CredentialStore {
+public struct KeychainCredentialStore: CredentialStore {
     let service: String
 
-    init(service: String = "co.trywe.issues") {
+    public init(service: String = "co.trywe.issues") {
         self.service = service
     }
 
@@ -31,7 +40,7 @@ struct KeychainCredentialStore: CredentialStore {
         ]
     }
 
-    func token(forServer server: String) throws -> String? {
+    public func token(forServer server: String) throws -> String? {
         var query = query(forServer: server)
         query[kSecReturnData as String] = true
         query[kSecMatchLimit as String] = kSecMatchLimitOne
@@ -49,7 +58,7 @@ struct KeychainCredentialStore: CredentialStore {
         }
     }
 
-    func store(_ token: String, forServer server: String) throws {
+    public func store(_ token: String, forServer server: String) throws {
         // Delete first rather than branching on add-versus-update: an update with
         // no existing item fails, and the two-step keeps one code path.
         try? remove(forServer: server)
@@ -64,7 +73,7 @@ struct KeychainCredentialStore: CredentialStore {
         guard status == errSecSuccess else { throw KeychainError(status: status) }
     }
 
-    func remove(forServer server: String) throws {
+    public func remove(forServer server: String) throws {
         let status = SecItemDelete(query(forServer: server) as CFDictionary)
         guard status == errSecSuccess || status == errSecItemNotFound else {
             throw KeychainError(status: status)
@@ -72,10 +81,10 @@ struct KeychainCredentialStore: CredentialStore {
     }
 }
 
-struct KeychainError: Error, CustomStringConvertible {
-    let status: OSStatus
+public struct KeychainError: Error, CustomStringConvertible {
+    public let status: OSStatus
 
-    var description: String {
+    public var description: String {
         let detail = SecCopyErrorMessageString(status, nil) as String? ?? "status \(status)"
         return "Keychain error: \(detail)"
     }
@@ -86,20 +95,22 @@ struct KeychainError: Error, CustomStringConvertible {
 /// The fallback ticket 11 specified for Linux, which nothing targets any more —
 /// it survives because it is what the tests drive, and because `ISSUES_*` env
 /// deployments on a headless Mac have no unlocked keychain either.
-struct FileCredentialStore: CredentialStore {
-    let file: URL
+public struct FileCredentialStore: CredentialStore {
+    public let file: URL
 
-    func token(forServer server: String) throws -> String? {
+    public init(file: URL) { self.file = file }
+
+    public func token(forServer server: String) throws -> String? {
         try entries()[server]
     }
 
-    func store(_ token: String, forServer server: String) throws {
+    public func store(_ token: String, forServer server: String) throws {
         var all = try entries()
         all[server] = token
         try write(all)
     }
 
-    func remove(forServer server: String) throws {
+    public func remove(forServer server: String) throws {
         var all = try entries()
         all[server] = nil
         try write(all)
@@ -138,7 +149,17 @@ struct FileCredentialStore: CredentialStore {
                 contents: Data((contents + "\n").utf8),
                 attributes: [.posixPermissions: 0o600])
         else {
-            throw CLIError.malformedConfiguration("Could not write credentials to \(file.path).")
+            throw CredentialStoreError.couldNotWrite(path: file.path)
+        }
+    }
+}
+
+public enum CredentialStoreError: Error, CustomStringConvertible, Sendable {
+    case couldNotWrite(path: String)
+
+    public var description: String {
+        switch self {
+        case .couldNotWrite(let path): "Could not write credentials to \(path)."
         }
     }
 }

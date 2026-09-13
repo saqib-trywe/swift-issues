@@ -244,3 +244,51 @@ struct SyncSurfaceTests {
         }
     }
 }
+
+/// Ticket 10: never imply data is current. These are the ways that rule can be
+/// broken by accident.
+@Suite("Currency claims")
+struct CurrencyClaimTests {
+
+    /// Found by looking at the running app: it reported "Up to date with the
+    /// server" beside a "sign in again" banner. Nothing had synced.
+    @Test("a signed-out client never claims to be up to date", arguments: [0, 1, 4])
+    func signedOutClientNeverClaimsToBeUpToDate(_ queued: Int) {
+        var status = SyncStatus()
+        status.authentication = .needsReauthentication
+        status.queuedCount = queued
+
+        let description = status.progressDescription.lowercased()
+        #expect(!description.contains("up to date"))
+        #expect(description.contains("not syncing"))
+    }
+
+    /// And a signed-out client with unsent work has to say how much, since that is
+    /// what the logout warning and the user's own judgement rest on.
+    @Test("a signed-out client still reports what is waiting")
+    func signedOutClientStillReportsWhatIsWaiting() {
+        var status = SyncStatus()
+        status.authentication = .needsReauthentication
+        status.queuedCount = 3
+
+        #expect(status.progressDescription.contains("3"))
+    }
+
+    @Test("a working client with nothing queued may say it is up to date")
+    func workingClientMaySayItIsUpToDate() {
+        var status = SyncStatus()
+        status.authentication = .valid
+        status.queuedCount = 0
+
+        #expect(status.progressDescription.lowercased().contains("up to date"))
+    }
+
+    /// A failed sync must not claim currency either.
+    @Test("a failed sync does not claim to be up to date")
+    func failedSyncDoesNotClaimToBeUpToDate() {
+        var status = SyncStatus()
+        status.progress = .failed("no network")
+
+        #expect(!status.progressDescription.lowercased().contains("up to date"))
+    }
+}

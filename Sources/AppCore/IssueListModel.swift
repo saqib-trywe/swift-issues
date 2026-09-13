@@ -40,6 +40,23 @@ public final class IssueListModel {
 
     deinit { observation.cancel() }
 
+    /// Records what the sync engine is doing.
+    ///
+    /// Set from outside rather than derived: no query can see whether a sync is in
+    /// flight, and ticket 09 requires a rebuild to be presented as recovery rather
+    /// than as an error.
+    public func setProgress(_ progress: SyncProgress) {
+        status.progress = progress
+    }
+
+    /// Records whether the credential still works.
+    ///
+    /// Separate from progress because a rejected token is not a failed sync: the
+    /// queue is intact and the remedy is signing in (ticket 07).
+    public func setAuthentication(_ state: AuthenticationState) {
+        status.authentication = state
+    }
+
     /// Reads once. Deterministic, which is what tests and a pull-to-refresh both
     /// want.
     public func reload() {

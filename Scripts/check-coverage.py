@@ -38,6 +38,10 @@ FLOORS = {
     # Ticket 13: view models 80%, view bodies ungated. This target holds the
     # models; the app shells that hold the view bodies are outside the package.
     "AppCore": 80.0,
+    # Low on purpose: the file store is fully tested, but the Keychain
+    # implementation beside it only runs with ISSUES_TEST_KEYCHAIN set, because a
+    # locked login keychain on a hosted runner can prompt and hang the job.
+    "Credentials": 40.0,
 }
 
 # Absorbs cross-toolchain variance, not slack. Xcode's Swift 6.3.3

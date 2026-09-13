@@ -34,6 +34,34 @@ extension ReplicaDatabase {
         }
     }
 
+    /// Every project in the replica, by key.
+    ///
+    /// Projects are pulled but never pushed, so this is always the server's view.
+    public func projects(includingArchived: Bool = false) throws -> [Project] {
+        try reader.read { db in
+            let sql =
+                includingArchived
+                ? "SELECT * FROM project ORDER BY key"
+                : "SELECT * FROM project WHERE archived = 0 ORDER BY key"
+            return try Row.fetchAll(db, sql: sql).compactMap(Self.project(from:))
+        }
+    }
+
+    static func project(from row: Row) -> Project? {
+        guard let id = (row["id"] as String?).flatMap(UUID.init(uuidString:)),
+            let key = (row["key"] as String?).flatMap(ProjectKey.init)
+        else { return nil }
+
+        return Project(
+            id: Project.ID(id),
+            key: key,
+            name: row["name"],
+            description: row["description"],
+            archived: row["archived"],
+            createdAt: row["created_at"],
+            updatedAt: row["updated_at"])
+    }
+
     static func comment(from row: Row) -> Comment? {
         guard let id = (row["id"] as String?).flatMap(UUID.init(uuidString:)),
             let issueId = (row["issue_id"] as String?).flatMap(UUID.init(uuidString:)),

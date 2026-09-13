@@ -8,6 +8,7 @@ let package = Package(
     platforms: [.macOS(.v26), .iOS(.v26)],
     products: [
         .library(name: "Core", targets: ["Core"]),
+        .library(name: "Credentials", targets: ["Credentials"]),
         .library(name: "ClientStore", targets: ["ClientStore"]),
         .library(name: "AppCore", targets: ["AppCore"]),
         .library(name: "AppViews", targets: ["AppViews"]),
@@ -52,11 +53,20 @@ let package = Package(
             dependencies: ["Server"],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
+        // Token storage, shared by the CLI and the apps. Its own target because the
+        // Keychain implementation cannot be exercised in CI, and folding it into
+        // `Core` would mean lowering that module's coverage bar to suit the one
+        // piece that cannot be measured.
+        .target(
+            name: "Credentials",
+            swiftSettings: [.swiftLanguageMode(.v6)]
+        ),
         // A library for the same reason `Server` is one: `main` cannot be tested.
         .target(
             name: "CLI",
             dependencies: [
                 "Core",
+                "Credentials",
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
             ],
             swiftSettings: [.swiftLanguageMode(.v6)]
@@ -83,7 +93,7 @@ let package = Package(
         // also keeps it driveable from `swift test`.
         .target(
             name: "AppCore",
-            dependencies: ["Core", "ClientStore"],
+            dependencies: ["Core", "ClientStore", "Credentials"],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
         // The shared SwiftUI components. A separate target from `AppCore` because

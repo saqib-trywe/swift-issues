@@ -121,14 +121,24 @@ extension SyncStatus {
     /// no timing guarantee, so "updated 2 minutes ago" becomes a lie the moment a
     /// refresh is missed — and the user cannot tell the difference.
     public var progressDescription: String {
+        // With no working credential nothing has synced, so "up to date" would be a
+        // claim the client cannot make. Found by looking at the running app: it said
+        // exactly that beside a "sign in again" banner.
+        if authentication == .needsReauthentication {
+            return queuedCount == 0
+                ? "Not syncing — signed out"
+                : "Not syncing — \(queuedCount) change\(queuedCount == 1 ? "" : "s") waiting"
+        }
+
         switch progress {
         case .idle:
-            queuedCount == 0
+            return queuedCount == 0
                 ? "Up to date with the server"
-                : (queuedCount == 1 ? "1 change waiting to send" : "\(queuedCount) changes waiting to send")
-        case .syncing: "Syncing…"
-        case .rebuilding: "Rebuilding…"
-        case .failed: "Not synced"
+                : (queuedCount == 1
+                    ? "1 change waiting to send" : "\(queuedCount) changes waiting to send")
+        case .syncing: return "Syncing…"
+        case .rebuilding: return "Rebuilding…"
+        case .failed: return "Not synced"
         }
     }
 }

@@ -1,5 +1,6 @@
 import ArgumentParser
 import Core
+import Credentials
 import Foundation
 
 /// The CLI's top level.

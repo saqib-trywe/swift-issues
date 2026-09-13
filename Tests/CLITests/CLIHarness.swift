@@ -1,4 +1,5 @@
 import Core
+import Credentials
 import Foundation
 import HTTPTypes
 import Hummingbird
