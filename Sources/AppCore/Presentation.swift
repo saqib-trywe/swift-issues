@@ -167,3 +167,22 @@ extension SyncSurface {
         }
     }
 }
+
+public enum CommentPresentation {
+
+    /// What to show where a deleted comment's body used to be.
+    ///
+    /// A removed comment keeps its place in the thread rather than the gap silently
+    /// closing: a conversation that renumbers itself reads as if the exchange never
+    /// happened, and the reply below it stops making sense.
+    public static let deletedPlaceholder = "This comment was deleted."
+
+    public static func body(_ comment: Comment) -> String {
+        comment.body ?? deletedPlaceholder
+    }
+
+    /// Whether the body is the placeholder rather than something somebody wrote.
+    public static func isPlaceholder(_ comment: Comment) -> Bool {
+        comment.body == nil
+    }
+}

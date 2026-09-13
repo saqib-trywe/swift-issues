@@ -14,7 +14,7 @@ struct PreviewApp: App {
     var body: some Scene {
         WindowGroup("Issues — component gallery") {
             Gallery()
-                .frame(minWidth: 900, minHeight: 1150)
+                .frame(minWidth: 900, minHeight: 1700)
         }
     }
 }
@@ -38,6 +38,21 @@ struct Gallery: View {
                             Divider()
                         }
                     }
+                }
+
+                section("Detail — with Markdown, a locked field and a deleted comment") {
+                    IssueDetailContent(
+                        issue: Fixtures.detailIssue,
+                        comments: Fixtures.thread,
+                        labels: Fixtures.labels,
+                        assignee: Fixtures.assignee,
+                        reporter: Fixtures.reporter,
+                        projectKey: project.key,
+                        readOnly: { $0 == .status },
+                        authorName: Fixtures.authorName
+                    )
+                    .padding(12)
+                    .background(.quaternary.opacity(0.2), in: RoundedRectangle(cornerRadius: 10))
                 }
 
                 section("Atoms") {

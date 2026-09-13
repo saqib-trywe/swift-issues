@@ -192,3 +192,34 @@ struct SyncSurfacePresentationTests {
         #expect(Set(symbols).count == symbols.count)
     }
 }
+
+@Suite("Comment presentation")
+struct CommentPresentationTests {
+
+    /// A removed comment keeps its place in the thread. A conversation that closes
+    /// its gaps reads as if the exchange never happened, and the reply below it
+    /// stops making sense.
+    @Test("a deleted comment shows a placeholder rather than nothing")
+    func deletedCommentShowsAPlaceholder() {
+        let deleted = Comment.fixture(body: nil)
+
+        #expect(CommentPresentation.isPlaceholder(deleted))
+        #expect(!CommentPresentation.body(deleted).isEmpty)
+        #expect(CommentPresentation.body(deleted).lowercased().contains("deleted"))
+    }
+
+    @Test("an ordinary comment shows its own text")
+    func ordinaryCommentShowsItsOwnText() {
+        let comment = Comment.fixture(body: "Looks right to me.")
+
+        #expect(!CommentPresentation.isPlaceholder(comment))
+        #expect(CommentPresentation.body(comment) == "Looks right to me.")
+    }
+
+    /// An empty string is something somebody wrote; nil is a deletion. Collapsing
+    /// them would put the deletion notice under a comment nobody deleted.
+    @Test("an empty body is not a deletion")
+    func emptyBodyIsNotADeletion() {
+        #expect(!CommentPresentation.isPlaceholder(Comment.fixture(body: "")))
+    }
+}

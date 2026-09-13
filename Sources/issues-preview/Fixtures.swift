@@ -51,6 +51,55 @@ enum Fixtures {
         return status
     }
 
+    static let reporter = User.fixture(email: "ada@example.com", displayName: "Ada Cole")
+
+    static func authorName(_ id: User.ID) -> String? {
+        id == assignee.id ? assignee.displayName : reporter.displayName
+    }
+
+    /// An issue with everything the detail view has to cope with at once: an
+    /// unrecognised status, an unsent edit, and a description using every block.
+    static var detailIssue: Overlaid<Issue> {
+        Overlaid(
+            record: Core.Issue.fixture(
+                key: IssueKey("PROJ-142"), projectId: projectId,
+                title: "Sync queue stalls behind a quarantined op",
+                description: """
+                    The queue stops making progress once an operation is refused.
+
+                    ## Steps
+
+                    1. Queue a write the server will reject
+                    2. Push
+                    3. Queue an unrelated write
+
+                    The unrelated write never goes out. Expected **only** dependents
+                    to be held back.
+
+                    ```
+                    SQLite error 1: no such column: sequence
+                        at PendingOperation.swift:118
+                    ```
+
+                    > Reported by Mel on the beta build.
+                    """,
+                status: .unknown("triaged"), priority: .urgent,
+                reporterId: reporter.id, assigneeId: assignee.id,
+                dueDate: CivilDate(wireValue: "2026-12-25")),
+            dirty: [.priority])
+    }
+
+    static var thread: [Core.Comment] {
+        [
+            Core.Comment.fixture(
+                authorId: reporter.id,
+                body: "Reproduced on `main`. It is the partial index — see above."),
+            Core.Comment.fixture(authorId: assignee.id, body: nil),
+            Core.Comment.fixture(
+                authorId: assignee.id, body: "Fix pushed.", via: .agent),
+        ]
+    }
+
     struct Row {
         let issue: Overlaid<Issue>
         let labels: [Core.Label]

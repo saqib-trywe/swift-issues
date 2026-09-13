@@ -490,6 +490,24 @@ It immediately earned itself: **rows without a dirty dot did not line up with ro
 
 Copy is asserted, not just written: the lost-to-deletion surface must say "deleted" and must **not** say "someone else edited this field" — which cannot happen under receipt-time last-write-wins — and **no surface may imply freshness**, since iOS background refresh has no timing guarantee and "updated 2 minutes ago" becomes a lie the moment a refresh is missed.
 
+### `IssueDetailContent`, and Markdown that renders
+
+**1,069 tests.** The last shared component.
+
+**SwiftUI renders inline Markdown and silently ignores block structure**, so a description's headings, lists and fenced code would come out as run-together text with stray hyphens and backticks — on the field people paste stack traces into. Foundation's `AttributedString` parses the whole syntax and records blocks as presentation intents; `MarkdownBlocks` walks those runs and splits them, which is pure logic and therefore tested. No dependency: ADR 0008 already refused a pre-1.0 package to save comparable effort.
+
+Verified in the gallery: a heading, a numbered list keeping its numbers, bold inline, a code block with its **indentation intact** (it carries meaning in a stack trace), and a blockquote.
+
+| Decision | Why |
+| --- | --- |
+| Unparseable source is shown **verbatim** rather than dropped | It is still the user's text, and showing nothing is worse than showing it plainly |
+| A nested list reports its **depth** | Otherwise a sub-list renders flat and the structure the author wrote is lost |
+| A deleted comment keeps its place with a placeholder | A thread that closes its gaps reads as if the exchange never happened, and the reply below it stops making sense |
+| An **empty** comment body is not a deletion | Somebody wrote that; `nil` is the deletion. Collapsing them puts a deletion notice under a comment nobody deleted |
+| A field whose value this build cannot represent renders **locked** | Visible in the gallery: `triaged` carries a padlock rather than a picker that would clobber it |
+
+AppCore's baseline moved 97.36% → 96.97%: what is now uncovered is four defensive branches in the splitter that Foundation's parser does not reach — a parse failure that `returnPartiallyParsedIfPossible` prevents, a run with no presentation intent, and the leading-newline trim.
+
 ### Open gaps
 
 - **Four unreachable defensive lines in Core are uncovered**, which is why the baseline moved from 99.29% to 99.07%: three `default: nil` folds that a per-entity slot can never reach, and the cycle fallback in the topological sort, which this domain cannot produce. The fallback emits the queue head rather than stopping, because silently dropping operations is the one outcome ADR 0004 forbids.
@@ -513,6 +531,7 @@ Copy is asserted, not just written: the lost-to-deletion surface must say "delet
 
 ### Next
 
-1. **`IssueDetailContent`** — field stack, read-only states for unrecognised enum values, and the comment thread. The last shared component.
-2. **The app shells**: an Xcode project with the macOS composition (`NavigationSplitView`, sortable `Table`, keyboard-first, plus the Mac-only token and session administration) and the iPhone/iPad ones.
-3. **MCP** last.
+**The shared layer is complete**: models, the five sync surfaces, atoms, row and detail.
+
+1. **The app shells** — an Xcode project with the macOS composition (`NavigationSplitView`, sortable `Table`, keyboard-first, plus the Mac-only token and session administration) and the iPhone/iPad ones. The first work that cannot be verified from `swift test`.
+2. **MCP** last.
