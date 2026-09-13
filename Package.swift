@@ -16,6 +16,7 @@ let package = Package(
         .executable(name: "issues", targets: ["issues-cli"]),
         // A throwaway gallery for looking at the shared components. Not shipped.
         .executable(name: "issues-preview", targets: ["issues-preview"]),
+        .executable(name: "issues-mcp", targets: ["issues-mcp"]),
     ],
     dependencies: [
         // ADR 0009: the only candidate both stable and structured-concurrency
@@ -51,6 +52,18 @@ let package = Package(
         .executableTarget(
             name: "issues-server",
             dependencies: ["Server"],
+            swiftSettings: [.swiftLanguageMode(.v6)]
+        ),
+        // The MCP surface. A library so the protocol and tools are testable as pure
+        // request-in/response-out functions; the executable below is a thin shell.
+        .target(
+            name: "MCP",
+            dependencies: ["Core", "Credentials"],
+            swiftSettings: [.swiftLanguageMode(.v6)]
+        ),
+        .executableTarget(
+            name: "issues-mcp",
+            dependencies: ["MCP"],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
         // Token storage, shared by the CLI and the apps. Its own target because the
@@ -167,6 +180,17 @@ let package = Package(
             dependencies: [
                 "AppViews", "AppCore", "Core", "ClientStore", "Credentials",
                 "TestSupport", "Server", "ServerTestSupport",
+                .product(name: "Hummingbird", package: "hummingbird"),
+                .product(name: "HummingbirdTesting", package: "hummingbird"),
+            ],
+            swiftSettings: [.swiftLanguageMode(.v6)]
+        ),
+        // Depends on `Server` so the tools run against the real router, as the CLI
+        // and client suites do.
+        .testTarget(
+            name: "MCPTests",
+            dependencies: [
+                "MCP", "Core", "Credentials", "Server", "ServerTestSupport", "TestSupport",
                 .product(name: "Hummingbird", package: "hummingbird"),
                 .product(name: "HummingbirdTesting", package: "hummingbird"),
             ],

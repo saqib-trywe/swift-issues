@@ -11,7 +11,10 @@ public enum IssuesRouter {
 
     public static let serverVersion = "0.1.0"
 
-    public static func build(database: AppDatabase) -> Router<AppRequestContext> {
+    public static func build(
+        database: AppDatabase,
+        rateLimiter: AgentRateLimiter = AgentRateLimiter()
+    ) -> Router<AppRequestContext> {
         let router = Router(context: AppRequestContext.self)
 
         router.get("/health") { _, _ in "ok" }
@@ -26,6 +29,9 @@ public enum IssuesRouter {
 
         let api = router.group("/api/v1")
         api.add(middleware: AuthenticationMiddleware(sessions: SessionRepository(database: database)))
+        // After authentication, because the limit is per token and depends on the
+        // token's kind — neither is known before then (ticket 12).
+        api.add(middleware: AgentRateLimitMiddleware(limiter: rateLimiter))
 
         api.get("/meta") { _, _ in
             try EditedResponse(

@@ -40,6 +40,9 @@ public struct Authenticated: Hashable, Sendable {
     public let role: Role
     public let kind: TokenKind
     public let deviceId: String?
+    /// Which token this is. Present so a limit can be applied per token rather than
+    /// per user: two agents belonging to one person should not share a budget.
+    public let sessionId: SessionSummary.ID?
 }
 
 /// Issues, resolves and revokes sessions.
@@ -169,8 +172,8 @@ public struct SessionRepository: Sendable {
                 let row = try Row.fetchOne(
                     db,
                     sql: """
-                        SELECT s.user_id, s.kind, s.device_id, s.expires_at, s.last_used_at,
-                               u.role, u.active
+                        SELECT s.id, s.user_id, s.kind, s.device_id, s.expires_at,
+                               s.last_used_at, u.role, u.active
                         FROM session s JOIN user u ON u.id = s.user_id
                         WHERE s.token_hash = ? AND s.revoked_at IS NULL
                         """,
@@ -197,7 +200,9 @@ public struct SessionRepository: Sendable {
                 userId: User.ID(userUUID),
                 role: Role(wireValue: row["role"]),
                 kind: TokenKind(wireValue: row["kind"]),
-                deviceId: row["device_id"]
+                deviceId: row["device_id"],
+                sessionId: (row["id"] as String?).flatMap(UUID.init(uuidString:))
+                    .map(SessionSummary.ID.init)
             )
         }
     }

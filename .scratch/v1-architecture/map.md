@@ -573,6 +573,26 @@ The iPad screenshot found a real gap first time round: **sync state was not visi
 
 **Seeding a simulator works where seeding the Mac app did not.** `simctl get_app_container` gives the path directly, so `issues-preview --seed <path>` fills the replica — the same trick as the Mac, but without the sandbox getting in the way of finding the container.
 
+### MCP — the fifth surface
+
+**1,199 tests. MCP 90.27%.** Ten fine-grained tools over stdio, plus the agent rate limiter ticket 12 specified and nobody had built.
+
+**Driven as a real client would**: piped JSON-RPC into the binary and got back an `initialize` handshake, ten tools, a created issue, and a compact listing. **Six replies for seven messages** — the notification correctly got none, which is the protocol detail easiest to get wrong.
+
+| Decision | Why |
+| --- | --- |
+| **Hand-rolled JSON-RPC**, no SDK | The surface is small and pure request-in/response-out, so it tests like everything else here. Cost, stated: verified against the specification, not against a real client |
+| A tool failure is reported **inside the result**, not as a protocol error | MCP draws that line deliberately: a protocol error means the call was malformed, while a tool that ran and failed is something the model should see. Returning -32603 for "title must not be empty" hides it from the model |
+| An **unconfigured server still lists tools** | A process that exits because `ISSUES_URL` is unset gives the host nothing to show; calling a tool explains what to set |
+| Falls back to the **CLI's stored credential** | An agent on a machine where somebody has run `issues auth login` works with no extra setup |
+| **No destructive tools.** `update_issue` with `status: cancelled` is the agent's "make it go away" | Deletion is a tombstone nobody can undo, and an agent looping on a misparsed instruction is precisely the actor not to hand that to |
+
+**The rate limiter** is keyed per token, not per user — two agents belonging to one person each get their own budget. Verified over real HTTP: **120 allowed, 20 refused** out of 140, with a human token untouched at zero. A 429 reaches the agent as "Wait 1 second before trying again, and do not retry sooner."
+
+Building it required adding `sessionId` to `Authenticated`, which was not there — without it the bucket could only be keyed per user.
+
+**A trap worth remembering**: the first rate-limit smoke test showed no refusals because `issues-server` was a release binary built *before* the limiter existed. `swift build -c release --product X` does not rebuild the others.
+
 ### Open gaps
 
 - **Four unreachable defensive lines in Core are uncovered**, which is why the baseline moved from 99.29% to 99.07%: three `default: nil` folds that a per-entity slot can never reach, and the cycle fallback in the topological sort, which this domain cannot produce. The fallback emits the queue head rather than stopping, because silently dropping operations is the one outcome ADR 0004 forbids.
@@ -598,6 +618,10 @@ The iPad screenshot found a real gap first time round: **sync state was not visi
 
 ### Next
 
-**All five surfaces now exist** — server, CLI, macOS, iPhone/iPad, with MCP remaining.
+**All five surfaces are built.** Server, CLI, macOS, iPhone/iPad and MCP, over one shared Core, with every ticket resolved and every ADR either honoured or explicitly amended.
 
-1. **MCP** — the last surface. It has what it needs: agent tokens are mintable, and an agent's authority is fixed and narrower than its owner's (ADR 0007). Ticket 12 specifies stdio transport, a local process reusing the CLI's credential conventions, and list tools returning a compact projection rather than raw payloads, because agents have a hard context budget that CLI users do not.
+What remains is not features:
+
+1. **Nothing in the apps has been driven by clicking.** Layout is verified by screenshot and behaviour by tests, but no path beginning with a click has run end to end. UI automation needs Accessibility permission.
+2. **The MCP server has never met a real client.** It is verified against the specification as I read it; pointing Claude Desktop at it is the test that matters.
+3. **Operational shakedown** — ticket 09's backup and restore command, and running the server under a LaunchAgent for a week.

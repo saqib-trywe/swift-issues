@@ -2,7 +2,7 @@
 
 A lightweight, self-hosted, offline-first issue tracker in Swift. One shared
 domain model, five surfaces over it: an HTTP server, a CLI, macOS and
-iPhone/iPad apps, and an MCP interface for agents.
+iPhone/iPad apps, and an MCP interface for agents. All five are built.
 
 Self-hosted means one small team on one Mac — not a platform. Offline-first means
 the apps hold a full replica and a queue of unsent writes, and keep working on a
@@ -35,9 +35,9 @@ graph TD
 
     subgraph surfaces["Surfaces"]
         Mac["macOS app<br/>split view · sortable table<br/>tokens and sessions"]
-        Phone["iPhone / iPad<br/>not yet built"]
+        Phone["iPhone / iPad<br/>stack · split view"]
         CLI["CLI<br/>online-only, stateless"]
-        MCP["MCP<br/>not yet built"]
+        MCP["MCP<br/>stdio, ten tools"]
     end
 
     Core --> Server
@@ -46,17 +46,18 @@ graph TD
     Creds --> CLI
     Creds --> AppCore
     AppViews --> Mac
-    AppViews -.-> Phone
+    AppViews --> Phone
 
     CLI -->|"REST<br/>/api/v1/…"| Server
-    MCP -.->|REST| Server
+    MCP -->|"REST<br/>agent token"| Server
     ClientStore -->|"sync push / pull<br/>epoch:seq watermark"| Server
 
     classDef built fill:#1F7A4D,stroke:#155c3a,color:#fff
     classDef pending fill:#4D5560,stroke:#3a404a,color:#fff,stroke-dasharray:4 3
     classDef store fill:#2D6CDF,stroke:#1f4ea0,color:#fff
-    class Core,Creds,Server,ClientStore,AppCore,AppViews,Mac,CLI built
-    class Phone,MCP pending
+    Core --> MCP
+    Creds --> MCP
+    class Core,Creds,Server,ClientStore,AppCore,AppViews,Mac,Phone,CLI,MCP built
     class DB,Replica store
 ```
 
@@ -81,7 +82,7 @@ Requires **Swift 6.3** and **macOS 26** on Apple silicon.
 
 ```sh
 make build      # build everything
-make test       # 1,095 tests, ~3 seconds
+make test       # 1,199 tests, ~3 seconds
 make coverage   # tests plus the per-target coverage gates
 make lint       # swift format, strict
 make build-ios  # the shared app layer, compiled for iOS
@@ -127,11 +128,12 @@ baseline** that does more real work than any absolute number.
 
 | Target | Coverage | Floor |
 | --- | --- | --- |
-| Core | 99.09% | 90% |
+| Core | 99.47% | 90% |
 | ClientStore | 99.59% | 85% |
 | Server | 98.41% | 80% |
 | AppCore | 97.42% | 80% |
 | CLI | 95.28% | 70% |
+| MCP | 90.27% | 70% |
 | Credentials | 45.87% | 40% |
 
 `Credentials` is low on purpose: the file store is fully tested, but the Keychain
