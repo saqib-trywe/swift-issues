@@ -15,6 +15,7 @@ struct ContentView: View {
     @State private var search = ""
     @State private var isSigningOut = false
     @State private var showsTokens = false
+    @State private var editing: EditorRequest?
 
     var body: some View {
         NavigationSplitView {
@@ -33,6 +34,13 @@ struct ContentView: View {
         .searchable(text: $search, prompt: "Filter issues")
         .sheet(isPresented: $showsTokens) {
             TokensView(session: session).frame(width: 720, height: 420)
+        }
+        .sheet(item: $editing) { request in
+            if let writer = session.writer {
+                IssueEditorSheet(
+                    projectId: request.projectId, existing: request.existing, writer: writer,
+                    onFinish: session.afterLocalWrite)
+            }
         }
         .signOutConfirmation(
             isPresented: $isSigningOut,
@@ -83,6 +91,16 @@ struct ContentView: View {
             detail(list)
         }
         .toolbar {
+            ToolbarItem {
+                Button {
+                    guard let project = session.selectedProject else { return }
+                    editing = EditorRequest(projectId: project, existing: nil)
+                } label: {
+                    Label("New Issue", systemImage: "plus")
+                }
+                .keyboardShortcut("n", modifiers: .command)
+                .disabled(session.selectedProject == nil)
+            }
             ToolbarItem {
                 Button {
                     Task { await session.sync() }
@@ -136,10 +154,26 @@ struct ContentView: View {
             let issue = list.issues.first(where: { $0.record.id == id })
         {
             ScrollView {
-                IssueDetailContent(
-                    issue: issue,
-                    projectKey: session.projects.first { $0.id == issue.record.projectId }?.key
-                )
+                VStack(alignment: .leading, spacing: 16) {
+                    IssueDetailContent(
+                        issue: issue,
+                        comments: session.comments(for: id),
+                        projectKey: session.projects.first { $0.id == issue.record.projectId }?.key
+                    )
+
+                    HStack {
+                        Button("Edit") {
+                            editing = EditorRequest(
+                                projectId: issue.record.projectId, existing: issue)
+                        }
+                        Spacer()
+                    }
+
+                    if let writer = session.writer {
+                        CommentComposer(
+                            issueId: id, writer: writer, onFinish: session.afterLocalWrite)
+                    }
+                }
                 .padding(16)
             }
         } else {
@@ -165,5 +199,18 @@ struct IssueRow: Identifiable {
         self.status = StatusPresentation.text(overlaid.record.status)
         self.priority = PriorityPresentation.text(overlaid.record.priority)
         self.overlaid = overlaid
+    }
+}
+
+/// What the editor sheet was opened for.
+///
+/// `Identifiable` so `sheet(item:)` rebuilds the form when the request changes,
+/// rather than reusing one seeded from a different issue.
+struct EditorRequest: Identifiable {
+    let projectId: Project.ID
+    let existing: Overlaid<Issue>?
+
+    var id: String {
+        existing.map { "edit-\($0.record.id.rawValue.uuidString)" } ?? "new"
     }
 }

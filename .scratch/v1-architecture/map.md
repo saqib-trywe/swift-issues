@@ -543,9 +543,27 @@ Also confirmed: with the token revoked the **replica still showed every issue** 
 
 **Limit worth stating: the token UI itself is compile-verified only.** Seeding the app's Keychain entry to launch it triggered a system authorisation prompt that cannot be answered from here — the same hazard that keeps `KeychainTests` out of CI. The model beneath it is fully tested; the views are not.
 
+### Writes from the app
+
+**1,117 tests. AppCore 97.68%.** Create, edit, comment and delete, all through the offline queue — nothing goes straight to the network.
+
+The load-bearing piece is `IssueDraft.patch(against:)`, which records **only the fields that actually changed**. Ticket 05's reason: a whole-record snapshot carries stale values for untouched fields, and under per-field last-write-wins those stale values beat somebody else's newer edit, silently reverting their work. A form saved untouched queues nothing at all — a no-op operation is a round trip that changes nothing and an `updatedAt` bump that wins a race it should never have entered.
+
+| Decision | Why |
+| --- | --- |
+| The form is seeded from the **overlaid** value | So an edit builds on the user's own unsent changes, not on the server's older record |
+| Validation runs **before anything is queued** | An offline edit is refused while the person is looking at it, rather than quarantined hours later with no context |
+| Ids are UUIDv7 generated **client-side** | What lets a create happen offline at all, and what makes a retry idempotent rather than a duplicate |
+| A picker **disables itself** for an unrecognised value | Offering a control would let the user clobber a value this build cannot represent |
+
+**Verified in the running app, with no server at all**: the locally created issue shows its dirty dot, the `PLAT-•` key placeholder, and a status bar reading "1 change waiting to send". That is the offline-first claim, visible in one screenshot.
+
+**A sandboxed app cannot be seeded from outside.** Its `UserDefaults` and Keychain live in its container, so `defaults write` and `security add-generic-password` are invisible to it — the app showed "Add a server in Settings to begin" despite both being set. The replica is the one thing reachable, so `issues-preview --seed` fills it directly. Worth knowing before anyone tries to script a login.
+
 ### Open gaps
 
 - **Four unreachable defensive lines in Core are uncovered**, which is why the baseline moved from 99.29% to 99.07%: three `default: nil` folds that a per-entity slot can never reach, and the cycle fallback in the topological sort, which this domain cannot produce. The fallback emits the queue head rather than stopping, because silently dropping operations is the one outcome ADR 0004 forbids.
+- **Nothing in the app has been driven by clicking.** Layout is verified by screenshot and behaviour by tests, but no code path that begins with a click — the editor sheet, the comment box, sign-out — has been exercised end to end. UI automation needs Accessibility permission.
 - **The token and sign-out views are unverified visually.** Launching the app needs a Keychain entry, and seeding one from a script prompts for authorisation. Worth a look when the app is next run by hand.
 - **The `via` badge may be too subtle.** Ticket 12 wants attribution legible "at a glance"; it is currently a small secondary-tinted glyph. Visible in the gallery screenshot — worth a look before the app shells fix the layout around it.
 - **The server's SQLite files are `0644` inside a `0700` directory.** Protection is directory-level by design, but a file moved or copied out of it carries no protection of its own. Worth a `chmod` after open.
@@ -567,6 +585,5 @@ Also confirmed: with the token revoked the **replica still showed every issue** 
 
 ### Next
 
-1. **Writes from the app** — create, edit and comment, going through the offline queue. The engine and overlay are proven; this is wiring plus a form.
-2. **iPhone and iPad shells** — `NavigationStack` with a badged Inbox, and the Mac composition at touch sizes.
-3. **MCP** last.
+1. **iPhone and iPad shells** — `NavigationStack` with a badged Inbox, and the Mac composition at touch sizes. The shared layer is complete, so these are composition only.
+2. **MCP** last. It has what it needs: agent tokens are mintable and an agent's authority is fixed and narrower than its owner's.

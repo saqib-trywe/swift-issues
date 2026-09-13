@@ -11,6 +11,22 @@ import TestSupport
 /// unit-tested, so this exists to be looked at. Throwaway — it ships with nothing.
 @main
 struct PreviewApp: App {
+    init() {
+        // `--seed` fills the sandboxed Mac app's replica directly, so its UI can be
+        // looked at without a server. A sandboxed app reads its preferences and
+        // Keychain from its own container, so seeding those from outside is
+        // invisible to it — the replica is the one thing that can be reached.
+        if CommandLine.arguments.contains("--seed") {
+            do {
+                try Fixtures.seedContainerReplica()
+                print("seeded")
+            } catch {
+                print("seeding failed: \(error)")
+            }
+            exit(0)
+        }
+    }
+
     var body: some Scene {
         WindowGroup("Issues — component gallery") {
             Gallery()

@@ -53,6 +53,29 @@ final class AppSession {
 
     var isConfigured: Bool { !serverURL.isEmpty && !(token ?? "").isEmpty }
 
+    /// Queues writes into the replica. Nil until the database is open.
+    ///
+    /// Writes never go straight to the network: they land in the queue, show
+    /// through the overlay at once, and the engine sends them when it can. That is
+    /// what makes the app work on a plane.
+    var writer: IssueWriter? {
+        database.map(IssueWriter.init(database:))
+    }
+
+    /// Refreshes after a local write, then tries to send it.
+    ///
+    /// The write is already visible either way — the sync is opportunistic, not
+    /// something the user waits on.
+    func afterLocalWrite() {
+        list?.reload()
+        Task { await sync() }
+    }
+
+    /// An issue's comment thread from the replica.
+    func comments(for id: Issue.ID) -> [Core.Comment] {
+        (try? database?.comments(forIssue: id)) ?? []
+    }
+
     /// A token model bound to the current connection, or nil when there is none.
     func makeTokenModel() -> TokenListModel? {
         guard let url = URL(string: serverURL), let token, !token.isEmpty else { return nil }

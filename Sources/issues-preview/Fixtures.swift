@@ -7,6 +7,50 @@ import TestSupport
 
 /// Sample data for the gallery. Nothing here is used by the apps.
 enum Fixtures {
+
+    /// Fills the Mac app's replica with something to look at.
+    static func seedContainerReplica() throws {
+        let container = FileManager.default.homeDirectoryForCurrentUser
+            .appending(path: "Library/Containers/co.trywe.issues/Data/Library/Application Support/Issues")
+        try FileManager.default.createDirectory(at: container, withIntermediateDirectories: true)
+
+        let database = try ReplicaDatabase.open(at: container.appending(path: "replica.sqlite"))
+        let projectId = Project.ID(UUIDv7.generate())
+        let reporter = User.ID(UUIDv7.generate())
+
+        let project = Project(
+            id: projectId, key: ProjectKey("PLAT")!, name: "Platform",
+            description: "Server and sync work", archived: false,
+            createdAt: Date(), updatedAt: Date())
+
+        func issue(_ number: Int, _ title: String, _ status: Status, _ priority: Priority) -> Issue {
+            Issue(
+                id: Issue.ID(UUIDv7.generate()), key: IssueKey("PLAT-\(number)"), projectId: projectId,
+                title: title, description: "", status: status, priority: priority,
+                reporterId: reporter, via: .human, createdAt: Date(), updatedAt: Date())
+        }
+
+        let seeded: [Issue] = [
+            issue(1, "Sync queue stalls behind a quarantined op", .inProgress, .urgent),
+            issue(2, "Tighten the epoch watermark check", .todo, .high),
+            issue(3, "Archive old projects", .done, .none),
+        ]
+
+        try database.apply(
+            [SyncChange(entity: .project, id: projectId.rawValue, deleted: false, record: .project(project))]
+                + seeded.map {
+                    SyncChange(entity: .issue, id: $0.id.rawValue, deleted: false, record: .issue($0))
+                },
+            upTo: Watermark(epoch: "seed", sequence: 10)!)
+
+        // A locally created issue, to show the unsent state.
+        let writer = IssueWriter(database: database)
+        _ = try writer.create(
+            IssueDraft(title: "Written offline, not yet sent", priority: .medium), in: projectId)
+
+        print("seeded \(try database.issues(in: projectId).count) issues")
+    }
+
     static let projectId = Project.ID()
     static let assignee = User.fixture(email: "mel@example.com", displayName: "Mel Rowe")
 

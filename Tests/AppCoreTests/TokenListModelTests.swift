@@ -185,12 +185,14 @@ struct TokenListModelTests {
 
     /// Every failure a user can provoke has to read as a sentence, not as an enum
     /// case — this is the only place they learn what went wrong.
-    @Test("server failures are described in words", arguments: [
-        APIError.unauthenticated(nil),
-        APIError.invalidRequest(nil),
-        APIError.server(status: 503, problem: nil),
-        APIError.rateLimited(retryAfter: nil, problem: nil),
-    ])
+    @Test(
+        "server failures are described in words",
+        arguments: [
+            APIError.unauthenticated(nil),
+            APIError.invalidRequest(nil),
+            APIError.server(status: 503, problem: nil),
+            APIError.rateLimited(retryAfter: nil, problem: nil),
+        ])
     func serverFailuresAreDescribedInWords(_ error: APIError) {
         let described = TokenListModel.describe(error)
 
