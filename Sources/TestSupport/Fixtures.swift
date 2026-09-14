@@ -18,8 +18,8 @@ public enum Fixtures {
 extension User {
     public static func fixture(
         id: User.ID = User.ID(),
-        email: String = "saqib@example.com",
-        displayName: String = "Saqib",
+        email: String = "user@example.com",
+        displayName: String = "Example User",
         role: Role = .member,
         active: Bool = true,
         createdAt: Date = Fixtures.epoch,

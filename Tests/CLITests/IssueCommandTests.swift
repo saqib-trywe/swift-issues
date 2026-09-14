@@ -178,7 +178,7 @@ struct IssueCommandTests {
     @Test("--assignee rejects something that is neither a token nor an id")
     func assigneeRejectsNonsense() async throws {
         try await withIssues { world, _ in
-            let result = await world.run(["list", "--assignee", "saqib"])
+            let result = await world.run(["list", "--assignee", "user"])
             #expect(result.code == 2)
         }
     }
@@ -241,7 +241,7 @@ struct IssueCommandTests {
 
             #expect(result.code == 0)
             #expect(result.standardOutput.contains(issues[0].title))
-            #expect(result.standardOutput.contains("Saqib"))
+            #expect(result.standardOutput.contains("Example User"))
         }
     }
 
@@ -465,7 +465,7 @@ struct IssueExpansionUseTests {
             let result = await world.run(["list"])
 
             #expect(result.code == 0, Comment(rawValue: result.standardError))
-            #expect(result.standardOutput.contains("Saqib"))
+            #expect(result.standardOutput.contains("Example User"))
         }
     }
 
@@ -481,8 +481,8 @@ struct IssueExpansionUseTests {
             let result = await world.run(["show", try #require(issue.key).wireValue])
 
             #expect(result.code == 0, Comment(rawValue: result.standardError))
-            #expect(result.standardOutput.contains("Reporter:  Saqib"))
-            #expect(result.standardOutput.contains("Assignee:  Saqib"))
+            #expect(result.standardOutput.contains("Reporter:  Example User"))
+            #expect(result.standardOutput.contains("Assignee:  Example User"))
         }
     }
 

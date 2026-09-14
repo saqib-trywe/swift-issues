@@ -64,7 +64,7 @@ struct ServerCommandTests {
     }
 
     @discardableResult
-    private func seed(at url: URL, email: String = "saqib@example.com") throws -> AppDatabase {
+    private func seed(at url: URL, email: String = "user@example.com") throws -> AppDatabase {
         let database = try AppDatabase.open(at: url)
         try UserRepository(database: database).save(.fixture(email: email))
         return database
@@ -272,15 +272,15 @@ struct ServerCommandTests {
     @Test("the password prompt names the account")
     func promptNamesTheAccount() async throws {
         let url = try scratch().appending(path: "issues.sqlite")
-        let database = try seed(at: url, email: "saqib@example.com")
+        let database = try seed(at: url, email: "user@example.com")
         try database.writer.close()
 
         let recorder = CommandRecorder(secrets: ["a-new-password", "a-new-password"])
         _ = await ServerCLI.run(
-            arguments: ["admin", "reset-password", "--database", url.path, "saqib@example.com"],
+            arguments: ["admin", "reset-password", "--database", url.path, "user@example.com"],
             context: recorder.context())
 
-        #expect(recorder.prompts.first?.contains("saqib@example.com") == true)
+        #expect(recorder.prompts.first?.contains("user@example.com") == true)
         #expect(recorder.prompts.count == 2)
     }
 
@@ -289,13 +289,13 @@ struct ServerCommandTests {
         let url = try scratch().appending(path: "issues.sqlite")
         let database = try seed(at: url)
         let users = UserRepository(database: database)
-        let existing = try #require(try users.find(email: "saqib@example.com"))
+        let existing = try #require(try users.find(email: "user@example.com"))
         try users.setPassword(try PasswordHasher.testing.hash("the-old-one"), for: existing.id)
         try database.writer.close()
 
         let recorder = CommandRecorder(secrets: ["first-attempt", "second-attempt"])
         let code = await ServerCLI.run(
-            arguments: ["admin", "reset-password", "--database", url.path, "saqib@example.com"],
+            arguments: ["admin", "reset-password", "--database", url.path, "user@example.com"],
             context: recorder.context())
 
         #expect(code == 2)
@@ -303,7 +303,7 @@ struct ServerCommandTests {
 
         let reopened = try AppDatabase.open(at: url)
         let stored = try #require(
-            try UserRepository(database: reopened).credentials(forEmail: "saqib@example.com"))
+            try UserRepository(database: reopened).credentials(forEmail: "user@example.com"))
         #expect(try PasswordHasher.verify("the-old-one", against: stored.passwordHash))
         try reopened.writer.close()
     }
@@ -331,7 +331,7 @@ struct ServerCommandTests {
 
         let recorder = CommandRecorder(secrets: ["short", "short"])
         let code = await ServerCLI.run(
-            arguments: ["admin", "reset-password", "--database", url.path, "saqib@example.com"],
+            arguments: ["admin", "reset-password", "--database", url.path, "user@example.com"],
             context: recorder.context())
 
         #expect(code == 1)
@@ -560,7 +560,7 @@ struct ServerCommandTests {
 @Suite("Admin operations")
 struct AdminOperationTests {
 
-    private func database(email: String = "saqib@example.com", active: Bool = true) throws
+    private func database(email: String = "user@example.com", active: Bool = true) throws
         -> AppDatabase
     {
         let database = try AppDatabase.inMemory()
@@ -591,7 +591,7 @@ struct AdminOperationTests {
     @Test("a reset ends the sessions the old password was protecting")
     func resetEndsSessions() throws {
         let database = try self.database()
-        let user = try #require(try UserRepository(database: database).find(email: "saqib@example.com"))
+        let user = try #require(try UserRepository(database: database).find(email: "user@example.com"))
         let sessions = SessionRepository(database: database)
         try sessions.create(for: user.id, kind: .human, deviceId: "mac")
 
@@ -632,7 +632,7 @@ struct AdminOperationTests {
 
         let failure = #expect(throws: AdminOperations.Failure.self) {
             try AdminOperations.resetPassword(
-                "short", forEmail: "saqib@example.com", in: database, hasher: .testing)
+                "short", forEmail: "user@example.com", in: database, hasher: .testing)
         }
         #expect(failure?.description.contains("at least") == true)
     }

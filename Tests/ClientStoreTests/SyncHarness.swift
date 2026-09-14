@@ -48,7 +48,7 @@ struct SyncWorld: Sendable {
 func withSync(_ body: @Sendable @escaping (SyncWorld) async throws -> Void) async throws {
     let database = try AppDatabase.inMemory()
 
-    let owner = Core.User.fixture(email: "saqib@example.com", displayName: "Saqib", role: .admin)
+    let owner = Core.User.fixture(email: "user@example.com", displayName: "Example User", role: .admin)
     try UserRepository(database: database).save(owner)
     let project = Project.fixture()
     try ProjectRepository(database: database).save(project)

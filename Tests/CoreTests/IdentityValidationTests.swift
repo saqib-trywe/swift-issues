@@ -10,7 +10,7 @@ struct IdentityValidationTests {
     @Test(
         "an ordinary address is accepted",
         arguments: [
-            "saqib@example.com",
+            "user@example.com",
             "first.last@sub.example.co.uk",
             "plus+tag@example.com",
             "dashes-and_underscores@example-host.com",
@@ -68,7 +68,7 @@ struct IdentityValidationTests {
 
     @Test("an ordinary display name is accepted")
     func ordinaryDisplayNameIsAccepted() {
-        #expect(Validation.displayName("Saqib").isEmpty)
+        #expect(Validation.displayName("Example User").isEmpty)
         #expect(Validation.displayName(String(repeating: "a", count: 200)).isEmpty)
     }
 

@@ -124,7 +124,7 @@ func withCLI(
 ) async throws {
     let database = try AppDatabase.inMemory()
 
-    let owner = User.fixture(email: "saqib@example.com", displayName: "Saqib", role: .admin)
+    let owner = User.fixture(email: "user@example.com", displayName: "Example User", role: .admin)
     let users = UserRepository(database: database)
     try users.save(owner)
     // Cheap parameters: the stored hash records its own, so verification against

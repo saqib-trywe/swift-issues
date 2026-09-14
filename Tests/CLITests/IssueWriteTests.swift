@@ -421,7 +421,7 @@ struct IssueEditTests {
             let key = try #require(issue.key).wireValue
             _ = await world.run(["edit", key, "--unset", "assignee"])
 
-            let result = await world.run(["edit", key, "--assignee", "saqib@example.com"])
+            let result = await world.run(["edit", key, "--assignee", "user@example.com"])
             #expect(result.code == 0, Comment(rawValue: result.standardError))
             #expect(try reread(world, issue).assigneeId == world.owner.id)
         }
@@ -775,7 +775,7 @@ struct IssueWriteValidationTests {
     func unambiguousDisplayNameWorks() async throws {
         try await withCLI { world in
             try world.authenticate()
-            let result = await world.run(["create", "-t", "x", "--assignee", "Saqib", "--json"])
+            let result = await world.run(["create", "-t", "x", "--assignee", "Example User", "--json"])
 
             #expect(result.code == 0, Comment(rawValue: result.standardError))
             let issue = try JSONCoders.decoder.decode(

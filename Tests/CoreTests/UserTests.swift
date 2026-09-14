@@ -10,8 +10,8 @@ struct UserTests {
         let json = """
             {
               "id": "018f3a9c-0000-7000-8000-000000000001",
-              "email": "saqib@example.com",
-              "displayName": "Saqib",
+              "email": "user@example.com",
+              "displayName": "Example User",
               "role": "admin",
               "active": true,
               "createdAt": "2025-09-04T15:33:20.123Z",
@@ -21,8 +21,8 @@ struct UserTests {
 
         let user = try JSONCoders.decoder.decode(User.self, from: Data(json.utf8))
 
-        #expect(user.email == "saqib@example.com")
-        #expect(user.displayName == "Saqib")
+        #expect(user.email == "user@example.com")
+        #expect(user.displayName == "Example User")
         #expect(user.role == .admin)
         #expect(user.active)
     }

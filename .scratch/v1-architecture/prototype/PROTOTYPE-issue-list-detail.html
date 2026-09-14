@@ -159,9 +159,9 @@ const LAB = { bug:'#c0392b', backend:'#2d6cdf', ux:'#7d3fb5', infra:'#0e8a6b' };
 const ST = { todo:['Todo','st-todo'], inProgress:['In Progress','st-prog'], done:['Done','st-done'], cancelled:['Cancelled','st-canc'] };
 
 const ISSUES = [
-  {k:'PROJ-142', t:'Sync queue stalls behind a quarantined op', s:'inProgress', pr:'Urgent', a:'saqib', lab:['bug','backend'], due:'2026-09-11', via:'human', c:4},
+  {k:'PROJ-142', t:'Sync queue stalls behind a quarantined op', s:'inProgress', pr:'Urgent', a:'user', lab:['bug','backend'], due:'2026-09-11', via:'human', c:4},
   {k:null,       t:'Draft: label picker loses colour on rename', s:'todo', pr:'Medium', a:null, lab:['ux'], due:null, via:'human', c:0, local:true},
-  {k:'PROJ-140', t:'Add partial index on pending_operation.state', s:'todo', pr:'High', a:'saqib', lab:['backend','infra'], due:'2026-09-15', via:'agent', c:1},
+  {k:'PROJ-140', t:'Add partial index on pending_operation.state', s:'todo', pr:'High', a:'user', lab:['backend','infra'], due:'2026-09-15', via:'agent', c:1},
   {k:'PROJ-139', t:'410 vs 404 copy in CLI', s:'done', pr:'Low', a:'jo', lab:['ux'], due:null, via:'human', c:2},
   {k:'PROJ-137', t:'Bootstrap token unreachable under launchd', s:'inProgress', pr:'High', a:'jo', lab:['infra'], due:'2026-09-09', via:'human', c:7},
   {k:'PROJ-131', t:'Rename Workspace → Instance everywhere', s:'cancelled', pr:'None', a:null, lab:[], due:null, via:'human', c:1},
@@ -225,14 +225,14 @@ function detailPane(){
     <h2>${esc(ISSUES[0].t)}</h2>
     <div class="field"><div class="flabel">Status</div><div class="fval ${d?'dirtyf':''}">In Progress ${d?'<span class="dirty">●</span>':''}</div></div>
     <div class="field"><div class="flabel">Priority — unknown value, read-only</div><div class="fval ro">triaged &nbsp;<span style="font-size:10px">(this client can't represent it)</span></div></div>
-    <div class="field"><div class="flabel">Assignee</div><div class="fval ${d?'dirtyf':''}">saqib ${d?'<span class="dirty">●</span>':''}</div></div>
+    <div class="field"><div class="flabel">Assignee</div><div class="fval ${d?'dirtyf':''}">user ${d?'<span class="dirty">●</span>':''}</div></div>
     <div class="field"><div class="flabel">Due</div><div class="fval">11 Sep 2026</div></div>
     <div class="field"><div class="flabel">Labels</div><div class="fval">${labs(['bug','backend'])}</div></div>
     <div class="field"><div class="flabel">Description</div>
       <div class="desc">A rejected op blocks its dependents but must not block the rest of the queue.</div></div>
     <div class="flabel" style="margin-top:14px">Comments</div>
     <div class="cmt"><div class="who">jo · 2h ago</div>Partial index on <code>state='pending'</code> should cover it.</div>
-    <div class="cmt"><div class="who">saqib <span class="via">AGENT</span> · 1h ago</div>Filed follow-up PROJ-143.</div>
+    <div class="cmt"><div class="who">user <span class="via">AGENT</span> · 1h ago</div>Filed follow-up PROJ-143.</div>
   </div>`;
 }
 function mac(){
@@ -266,7 +266,7 @@ function ios(){
         <h2 style="font-size:16px;margin:0 0 10px">${esc(ISSUES[0].t)}</h2>
         ${S.dirty?'<div class="meta"><span class="dirty">● 2 unsynced edits</span></div>':''}
         <div class="field"><div class="flabel">Status</div><div class="fval ${S.dirty?'dirtyf':''}">In Progress</div></div>
-        <div class="field"><div class="flabel">Assignee</div><div class="fval">saqib</div></div>
+        <div class="field"><div class="flabel">Assignee</div><div class="fval">user</div></div>
         <div class="field"><div class="flabel">Labels</div><div class="fval">${labs(['bug','backend'])}</div></div>
         <div class="field"><div class="flabel">Description</div><div class="desc">A rejected op blocks its dependents but must not block the rest of the queue.</div></div>
         <div class="flabel" style="margin-top:12px">Comments</div>

@@ -16,7 +16,7 @@ struct AuthCommandTests {
     func loginStoresAUsableToken() async throws {
         try await withCLI { world in
             let result = await world.run(
-                ["auth", "login", "--email", "saqib@example.com"],
+                ["auth", "login", "--email", "user@example.com"],
                 isInputTerminal: true,
                 secrets: [CLIWorld.password])
 
@@ -29,7 +29,7 @@ struct AuthCommandTests {
             // The real proof: the stored token authenticates a later command.
             let status = await world.run(["auth", "status"])
             #expect(status.code == 0)
-            #expect(status.standardOutput.contains("saqib@example.com"))
+            #expect(status.standardOutput.contains("user@example.com"))
         }
     }
 
@@ -40,7 +40,7 @@ struct AuthCommandTests {
     func wrongPasswordAndUnknownAccountReadTheSame() async throws {
         try await withCLI { world in
             let wrong = await world.run(
-                ["auth", "login", "--email", "saqib@example.com"],
+                ["auth", "login", "--email", "user@example.com"],
                 isInputTerminal: true, secrets: ["not the password"])
             let unknown = await world.run(
                 ["auth", "login", "--email", "nobody@example.com"],
@@ -62,7 +62,7 @@ struct AuthCommandTests {
             try world.authenticate()
             let before = try world.credentials.token(forServer: "https://issues.example.test")
 
-            let result = await world.run(["auth", "login", "--email", "saqib@example.com"])
+            let result = await world.run(["auth", "login", "--email", "user@example.com"])
 
             #expect(result.code == 0)
             #expect(result.standardOutput.contains("Already logged in"))
@@ -77,7 +77,7 @@ struct AuthCommandTests {
             let before = try world.credentials.token(forServer: "https://issues.example.test")
 
             let result = await world.run(
-                ["auth", "login", "--email", "saqib@example.com", "--force"],
+                ["auth", "login", "--email", "user@example.com", "--force"],
                 isInputTerminal: true, secrets: [CLIWorld.password])
 
             #expect(result.code == 0)
@@ -116,7 +116,7 @@ struct AuthCommandTests {
             let result = await world.run(["auth", "status"])
 
             #expect(result.code == 0)
-            #expect(result.standardOutput.contains("Saqib"))
+            #expect(result.standardOutput.contains("Example User"))
             #expect(result.standardOutput.contains("admin"))
             #expect(result.standardOutput.contains("Instance:"))
         }
@@ -186,7 +186,7 @@ struct AuthServerSelectionTests {
             let result = await world.run(
                 [
                     "auth", "login", "--server", "https://other.example.test",
-                    "--email", "saqib@example.com",
+                    "--email", "user@example.com",
                 ],
                 isInputTerminal: true, secrets: [CLIWorld.password])
 
@@ -233,7 +233,7 @@ struct AuthServerSelectionTests {
             let result = await world.run(
                 ["auth", "login"],
                 isInputTerminal: true,
-                input: ["saqib@example.com"],
+                input: ["user@example.com"],
                 secrets: [CLIWorld.password])
 
             #expect(result.code == 0)
@@ -257,7 +257,7 @@ struct AuthServerSelectionTests {
     func emptyPasswordFails() async throws {
         try await withCLI { world in
             let result = await world.run(
-                ["auth", "login", "--email", "saqib@example.com"],
+                ["auth", "login", "--email", "user@example.com"],
                 isInputTerminal: true, secrets: [""])
             #expect(result.code == 2)
         }
@@ -271,7 +271,7 @@ struct AuthServerSelectionTests {
             try world.credentials.store("issues_pat_revoked", forServer: "https://issues.example.test")
 
             let result = await world.run(
-                ["auth", "login", "--email", "saqib@example.com"],
+                ["auth", "login", "--email", "user@example.com"],
                 isInputTerminal: true, secrets: [CLIWorld.password])
 
             #expect(result.code == 0)

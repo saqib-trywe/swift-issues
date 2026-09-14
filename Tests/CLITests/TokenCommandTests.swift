@@ -57,7 +57,7 @@ struct TokenCommandTests {
             let used = await world.run(
                 ["auth", "status"], environment: ["ISSUES_TOKEN": minted])
             #expect(used.code == 0, Comment(rawValue: used.standardError))
-            #expect(used.standardOutput.contains("saqib@example.com"))
+            #expect(used.standardOutput.contains("user@example.com"))
         }
     }
 
@@ -277,7 +277,7 @@ struct TokenCommandTests {
         try await withCLI { world in
             try world.authenticateAsMember()
             let result = await world.run(
-                ["auth", "token", "list", "--user", "saqib@example.com"])
+                ["auth", "token", "list", "--user", "user@example.com"])
             #expect(result.code == 4)
         }
     }

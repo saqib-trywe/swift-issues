@@ -287,7 +287,7 @@ struct PromptStreamTests {
         try await withCLI { world in
             let result = await world.run(
                 ["auth", "login"],
-                isInputTerminal: true, input: ["saqib@example.com"], secrets: [CLIWorld.password])
+                isInputTerminal: true, input: ["user@example.com"], secrets: [CLIWorld.password])
 
             #expect(result.code == 0, Comment(rawValue: result.standardError))
             #expect(!result.standardOutput.contains("Email"))

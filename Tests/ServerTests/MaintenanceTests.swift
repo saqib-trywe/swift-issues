@@ -24,7 +24,7 @@ struct MaintenanceTests {
     /// A populated database at a path, closed before it is returned so nothing holds
     /// a lock the test did not ask for.
     @discardableResult
-    private func seed(at url: URL, email: String = "saqib@example.com") throws -> String {
+    private func seed(at url: URL, email: String = "user@example.com") throws -> String {
         let database = try AppDatabase.open(at: url)
         try UserRepository(database: database).save(.fixture(email: email))
         try ProjectRepository(database: database).save(.fixture())
@@ -318,7 +318,7 @@ struct MaintenanceTests {
         let emails = try restored.reader.read {
             try String.fetchAll($0, sql: "SELECT email FROM user")
         }
-        #expect(emails == ["saqib@example.com"])
+        #expect(emails == ["user@example.com"])
         try restored.writer.close()
     }
 

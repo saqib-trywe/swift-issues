@@ -290,7 +290,7 @@ struct UserCommandTests {
             let result = await world.run(["user", "me"])
 
             #expect(result.code == 0, Comment(rawValue: result.standardError))
-            #expect(result.standardOutput.contains("saqib@example.com"))
+            #expect(result.standardOutput.contains("user@example.com"))
             #expect(result.standardOutput.contains("admin"))
         }
     }
@@ -302,7 +302,7 @@ struct UserCommandTests {
             let result = await world.run(["user", "list"])
 
             #expect(result.code == 0, Comment(rawValue: result.standardError))
-            #expect(result.standardOutput.contains("saqib@example.com"))
+            #expect(result.standardOutput.contains("user@example.com"))
         }
     }
 
@@ -310,10 +310,10 @@ struct UserCommandTests {
     func showAcceptsAnEmailAddress() async throws {
         try await withCLI { world in
             try world.authenticate()
-            let result = await world.run(["user", "show", "saqib@example.com"])
+            let result = await world.run(["user", "show", "user@example.com"])
 
             #expect(result.code == 0, Comment(rawValue: result.standardError))
-            #expect(result.standardOutput.contains("Saqib"))
+            #expect(result.standardOutput.contains("Example User"))
         }
     }
 
@@ -396,7 +396,7 @@ struct UserCommandTests {
         try await withCLI { world in
             try world.authenticate()
             let result = await world.run(
-                ["user", "password", "saqib@example.com"],
+                ["user", "password", "user@example.com"],
                 isInputTerminal: true, secrets: ["old", "short", "short"])
             #expect(result.code != 0)
         }
@@ -408,7 +408,7 @@ struct UserCommandTests {
     func settingAPasswordOffATerminalExplains() async throws {
         try await withCLI { world in
             try world.authenticate()
-            let result = await world.run(["user", "password", "saqib@example.com"])
+            let result = await world.run(["user", "password", "user@example.com"])
 
             #expect(result.code == 2)
             #expect(result.standardError.contains("shell history"))
@@ -456,7 +456,7 @@ struct UserCommandTests {
     func deactivateRequiresYesOffATerminal() async throws {
         try await withCLI { world in
             try world.authenticate()
-            let result = await world.run(["user", "deactivate", "saqib@example.com"])
+            let result = await world.run(["user", "deactivate", "user@example.com"])
 
             #expect(result.code == 2)
             #expect(result.standardError.contains("--yes"))
@@ -492,7 +492,7 @@ struct NounOutputTests {
             ["user", "list"],
             ["label", "list"],
             ["user", "me"],
-            ["user", "show", "saqib@example.com"],
+            ["user", "show", "user@example.com"],
             ["project", "show", "PROJ"],
         ])
     func jsonEmitsTheAPIPayload(_ arguments: [String]) async throws {
@@ -510,8 +510,8 @@ struct NounOutputTests {
     @Test(
         "--quiet emits bare identifiers for each noun",
         arguments: [
-            (["user", "me"], "saqib@example.com"),
-            (["user", "show", "saqib@example.com"], "saqib@example.com"),
+            (["user", "me"], "user@example.com"),
+            (["user", "show", "user@example.com"], "user@example.com"),
             (["project", "show", "PROJ"], "PROJ"),
         ])
     func quietEmitsBareIdentifiers(arguments: [String], expected: String) async throws {

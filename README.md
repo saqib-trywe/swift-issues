@@ -86,6 +86,7 @@ make test       # 1,275 tests, ~4 seconds
 make coverage   # tests plus the per-target coverage gates
 make lint       # swift format, strict
 make build-ios  # the shared app layer, compiled for iOS
+make pkg        # the per-user installer package
 ```
 
 The macOS app is a separate Xcode project:
@@ -122,7 +123,9 @@ It is unsigned unless `PKG_SIGN_IDENTITY` names a Developer ID Installer
 certificate, so on another Mac install it with `installer -pkg Issues-<version>.pkg
 -target CurrentUserHomeDirectory` or right-click, Open.
 
-`issues-server uninstall` reverses it and leaves your data alone.
+`issues-server uninstall` reverses it and leaves your data alone. To set the agent
+up by hand — after `swift build -c release`, say — `issues-server install-agent`
+does the same job the package's postinstall does, and is safe to re-run.
 
 ### Operating it
 
@@ -173,7 +176,7 @@ baseline** that does more real work than any absolute number.
 | ClientStore | 99.59% | 85% |
 | Server | 97.72% | 80% |
 | AppCore | 97.68% | 80% |
-| CLI | 95.33% | 70% |
+| CLI | 95.28% | 70% |
 | MCP | 90.27% | 70% |
 | Credentials | 45.87% | 40% |
 
