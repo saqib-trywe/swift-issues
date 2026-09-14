@@ -82,7 +82,7 @@ Requires **Swift 6.3** and **macOS 26** on Apple silicon.
 
 ```sh
 make build      # build everything
-make test       # 1,264 tests, ~4 seconds
+make test       # 1,275 tests, ~4 seconds
 make coverage   # tests plus the per-target coverage gates
 make lint       # swift format, strict
 make build-ios  # the shared app layer, compiled for iOS
@@ -105,6 +105,24 @@ swift run issues-server
 Everything lives under the user's own `~/Library/Application Support/Issues` —
 the install is rootless and runs under a LaunchAgent, not a LaunchDaemon. Without
 the environment variables, first run mints a single-use setup token instead.
+
+### Installing it
+
+```sh
+make pkg    # build/Issues-<version>.pkg
+```
+
+A **per-user package**: no administrator password, nothing owned by root. It puts
+`issues-server`, `issues` and `issues-mcp` in `~/.local/bin`, loads a LaunchAgent
+that starts the server at login, and sends its output — including the one-time
+setup token — to `~/Library/Logs/Issues/server.log`. Re-running it is the upgrade
+path: the agent is stopped, the binaries replaced, the agent reloaded.
+
+It is unsigned unless `PKG_SIGN_IDENTITY` names a Developer ID Installer
+certificate, so on another Mac install it with `installer -pkg Issues-<version>.pkg
+-target CurrentUserHomeDirectory` or right-click, Open.
+
+`issues-server uninstall` reverses it and leaves your data alone.
 
 ### Operating it
 
@@ -153,7 +171,7 @@ baseline** that does more real work than any absolute number.
 | --- | --- | --- |
 | Core | 99.47% | 90% |
 | ClientStore | 99.59% | 85% |
-| Server | 97.69% | 80% |
+| Server | 97.72% | 80% |
 | AppCore | 97.68% | 80% |
 | CLI | 95.33% | 70% |
 | MCP | 90.27% | 70% |

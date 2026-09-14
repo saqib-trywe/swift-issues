@@ -1,0 +1,11 @@
+#!/bin/bash
+# Stop the agent before its binary is replaced underneath it.
+#
+# Overwriting the file does not stop the running process — it keeps the old inode
+# — so a KeepAlive agent would carry on serving the previous version while the
+# installer reported success. Ticket 09: re-running the package stops the agent,
+# replaces the binary, and restarts.
+#
+# Never fatal: on a first install there is nothing loaded to stop.
+launchctl bootout "gui/$(id -u)/co.trywe.issues.server" 2>/dev/null || true
+exit 0

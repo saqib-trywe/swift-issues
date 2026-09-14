@@ -380,6 +380,73 @@ struct ServerCommandTests {
         #expect(recorder.output.lowercased().contains("cleartext"))
     }
 
+    // MARK: Install
+
+    @Test("install-agent writes a plist and loads it")
+    func installAgentWritesAndLoads() async throws {
+        let home = try scratch()
+        let recorder = CommandRecorder()
+
+        let code = await ServerCLI.run(
+            arguments: ["install-agent"], context: recorder.context(environment: ["HOME": home.path]))
+
+        #expect(code == 0)
+        let plist = LaunchAgent.plistURL(home: home)
+        #expect(FileManager.default.fileExists(atPath: plist.path))
+        #expect(recorder.processes.last?.first == "launchctl")
+        #expect(recorder.processes.last?.contains("bootstrap") == true)
+        #expect(recorder.processes.last?.contains(plist.path) == true)
+    }
+
+    /// launchd does not create the parent of `StandardOutPath`, and a job whose log
+    /// path is unwritable fails to spawn with nowhere to say so.
+    @Test("install-agent creates the log directory")
+    func installAgentCreatesLogDirectory() async throws {
+        let home = try scratch()
+        let recorder = CommandRecorder()
+
+        _ = await ServerCLI.run(
+            arguments: ["install-agent"], context: recorder.context(environment: ["HOME": home.path]))
+
+        let logs = LaunchAgent.logURL(home: home).deletingLastPathComponent()
+        var isDirectory: ObjCBool = false
+        #expect(FileManager.default.fileExists(atPath: logs.path, isDirectory: &isDirectory))
+        #expect(isDirectory.boolValue)
+        #expect(recorder.output.contains(LaunchAgent.logURL(home: home).path))
+    }
+
+    /// Re-running the installer is an upgrade. Bootstrapping over a job that is
+    /// already loaded fails, which would leave the old binary running and the
+    /// installer reporting success.
+    @Test("install-agent unloads an existing job before loading the new one")
+    func installAgentIsIdempotent() async throws {
+        let home = try scratch()
+        let recorder = CommandRecorder()
+
+        _ = await ServerCLI.run(
+            arguments: ["install-agent"], context: recorder.context(environment: ["HOME": home.path]))
+
+        let calls = recorder.processes
+        #expect(calls.count == 2)
+        #expect(calls.first?.contains("bootout") == true)
+        #expect(calls.last?.contains("bootstrap") == true)
+    }
+
+    /// An agent that did not load must not be reported as installed: the operator
+    /// would go looking for a server that is not running.
+    @Test("a refused load is a failure, and says where the plist is")
+    func refusedLoadIsAFailure() async throws {
+        let home = try scratch()
+        let recorder = CommandRecorder()
+        var context = recorder.context(environment: ["HOME": home.path])
+        context.runProcess = { arguments in arguments.contains("bootstrap") ? 5 : 0 }
+
+        let code = await ServerCLI.run(arguments: ["install-agent"], context: context)
+
+        #expect(code == 2)
+        #expect(recorder.errors.contains(LaunchAgent.plistURL(home: home).path))
+    }
+
     // MARK: Uninstall
 
     @Test("uninstall removes the agent and keeps the data")

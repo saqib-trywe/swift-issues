@@ -89,6 +89,15 @@ public struct ServerContext: Sendable {
     /// Injected so the tests are not paying production scrypt rounds per case.
     var hasher: PasswordHasher = .production
 
+    /// The home directory this invocation works in.
+    ///
+    /// `$HOME` first, for the same reason everywhere else in this project does it:
+    /// `NSHomeDirectory()` reads the password database, and a test that exercised
+    /// that fallback would write into the real home.
+    public func home() -> URL {
+        URL(fileURLWithPath: environment["HOME"] ?? NSHomeDirectory())
+    }
+
     public static func standard() -> ServerContext {
         ServerContext(
             environment: ProcessInfo.processInfo.environment,
@@ -143,7 +152,8 @@ struct Root: AsyncParsableCommand {
         version: ServerCLI.version,
         subcommands: [
             Serve.self, BackupCommand.self, RestoreCommand.self, InspectCommand.self,
-            AdminCommand.self, ConfigCommand.self, VersionCommand.self, UninstallCommand.self,
+            AdminCommand.self, ConfigCommand.self, VersionCommand.self,
+            InstallAgentCommand.self, UninstallCommand.self,
         ],
         // Running the binary with no arguments serves, because that is what launchd
         // does: a plist naming a subcommand is one more thing to get wrong.
@@ -358,6 +368,56 @@ struct VersionCommand: ParsableCommand {
     }
 }
 
+struct InstallAgentCommand: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "install-agent",
+        abstract: "Write the LaunchAgent and start the server.",
+        discussion: """
+            Run by the installer package, and safe to re-run: an existing agent is \
+            unloaded first, so an upgrade replaces the job rather than stacking a \
+            second one beside it.
+            """)
+
+    func run() throws {
+        let context = ServerRuntime.context
+        let home = context.home()
+        let manager = FileManager.default
+
+        // The log directory has to exist first. launchd does not create the parent
+        // of StandardOutPath, and a job whose log path is unwritable fails to spawn
+        // with nowhere to say so.
+        for directory in [
+            LaunchAgent.plistURL(home: home).deletingLastPathComponent(),
+            LaunchAgent.logURL(home: home).deletingLastPathComponent(),
+        ] {
+            try manager.createDirectory(at: directory, withIntermediateDirectories: true)
+        }
+
+        try LaunchAgent.plistData(home: home).write(to: LaunchAgent.plistURL(home: home))
+
+        // Idempotent: unload whatever is there before loading this. Bootstrapping
+        // over a job that is already loaded fails, which on an upgrade would leave
+        // the old binary running and the installer reporting success.
+        _ = try? context.runProcess([
+            "launchctl", "bootout", LaunchAgent.serviceTarget(uid: getuid()),
+        ])
+        let status = try context.runProcess([
+            "launchctl", "bootstrap", LaunchAgent.domainTarget(uid: getuid()),
+            LaunchAgent.plistURL(home: home).path,
+        ])
+        guard status == 0 else {
+            throw ValidationError(
+                "launchctl refused to load the agent (status \(status)). "
+                    + "The plist is at \(LaunchAgent.plistURL(home: home).path).")
+        }
+
+        context.print("Installed \(LaunchAgent.label).")
+        context.print(
+            "Logs, including the first-run setup token, go to "
+                + LaunchAgent.logURL(home: home).path + ".")
+    }
+}
+
 struct UninstallCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "uninstall",
@@ -371,22 +431,20 @@ struct UninstallCommand: ParsableCommand {
     @Flag(name: .long, help: "Also delete the database and everything beside it.")
     var purge = false
 
-    static let agentLabel = "co.trywe.issues.server"
-
     func run() throws {
         let context = ServerRuntime.context
         let support = ServerEntryPoint.applicationSupport(environment: context.environment)
-        let home = URL(fileURLWithPath: context.environment["HOME"] ?? NSHomeDirectory())
+        let home = context.home()
         let manager = FileManager.default
 
         // Unloading first: removing the plist under a loaded agent leaves launchd
         // supervising a binary that is no longer there.
         _ = try? context.runProcess([
-            "launchctl", "bootout", "gui/\(getuid())/\(Self.agentLabel)",
+            "launchctl", "bootout", LaunchAgent.serviceTarget(uid: getuid()),
         ])
 
-        let plist = home.appending(path: "Library/LaunchAgents/\(Self.agentLabel).plist")
-        let binary = home.appending(path: ".local/bin/issues-server")
+        let plist = LaunchAgent.plistURL(home: home)
+        let binary = LaunchAgent.binaryURL(home: home)
         for url in [plist, binary] where manager.fileExists(atPath: url.path) {
             try manager.removeItem(at: url)
             context.print("Removed \(url.path).")

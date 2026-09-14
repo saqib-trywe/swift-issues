@@ -14,3 +14,4 @@ DerivedData/
 xcuserdata/
 *.xcscmblueprint
 *.xccheckout
+build/

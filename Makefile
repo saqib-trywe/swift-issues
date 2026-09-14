@@ -1,4 +1,4 @@
-.PHONY: build build-ios test test-core lint format coverage coverage-baseline clean
+.PHONY: build build-ios test test-core lint format coverage coverage-baseline pkg clean
 
 build:
 	swift build
@@ -31,5 +31,9 @@ coverage-baseline:
 	swift test --enable-code-coverage
 	python3 Scripts/check-coverage.py --update-baseline
 
+# The per-user installer package. Unsigned unless PKG_SIGN_IDENTITY is set.
+pkg:
+	Scripts/build-pkg.sh
+
 clean:
-	rm -rf .build
+	rm -rf .build build

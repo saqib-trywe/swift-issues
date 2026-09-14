@@ -1,0 +1,12 @@
+#!/bin/bash
+# Hand the agent setup back to the binary, where it is tested.
+#
+# `install-agent` writes the plist and loads it, and is idempotent, so this is the
+# upgrade path as well as the first-install one.
+set -e
+
+# A user-domain install runs as the user, so $HOME is theirs. $2 is the install
+# destination, used only if the environment has no HOME to offer.
+HOME_DIR="${HOME:-$2}"
+"$HOME_DIR/.local/bin/issues-server" install-agent
+exit 0

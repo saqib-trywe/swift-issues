@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<installer-gui-script minSpecVersion="2">
+    <title>Issues</title>
+    <organization>co.trywe</organization>
+
+    <!--
+      A per-user install, as ADR 0010 requires: no administrator password, nothing
+      owned by root, and the data lives beside the person whose data it is. Turning
+      off the system domain is what forces that — offering both would let somebody
+      install into /usr/local and then wonder why the agent cannot reach a database
+      in their home.
+    -->
+    <domains enable_anywhere="false" enable_currentUserHome="true" enable_localSystem="false"/>
+
+    <options customize="never" require-scripts="true" hostArchitectures="arm64"/>
+
+    <volume-check>
+        <allowed-os-versions>
+            <os-version min="26.0"/>
+        </allowed-os-versions>
+    </volume-check>
+
+    <conclusion file="conclusion.html"/>
+
+    <choices-outline>
+        <line choice="default"/>
+    </choices-outline>
+    <choice id="default" visible="false">
+        <pkg-ref id="co.trywe.issues.server"/>
+    </choice>
+    <pkg-ref id="co.trywe.issues.server" version="__VERSION__">issues-server.pkg</pkg-ref>
+</installer-gui-script>
