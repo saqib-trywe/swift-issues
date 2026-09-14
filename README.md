@@ -82,7 +82,7 @@ Requires **Swift 6.3** and **macOS 26** on Apple silicon.
 
 ```sh
 make build      # build everything
-make test       # 1,256 tests, ~4 seconds
+make test       # 1,264 tests, ~4 seconds
 make coverage   # tests plus the per-target coverage gates
 make lint       # swift format, strict
 make build-ios  # the shared app layer, compiled for iOS
@@ -153,7 +153,7 @@ baseline** that does more real work than any absolute number.
 | --- | --- | --- |
 | Core | 99.47% | 90% |
 | ClientStore | 99.59% | 85% |
-| Server | 97.67% | 80% |
+| Server | 97.69% | 80% |
 | AppCore | 97.68% | 80% |
 | CLI | 95.33% | 70% |
 | MCP | 90.27% | 70% |

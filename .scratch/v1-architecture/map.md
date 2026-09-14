@@ -624,6 +624,20 @@ source's rows were still in its `-wal`, so copying the main file alone took a st
 snapshot. The same failure ADR 0010 was amended to warn about, reintroduced two
 paragraphs below the warning. Both paths now go through one `consolidate`.
 
+**A second error shape existed and nobody had noticed**, found by hand-rolling a
+`PUT` with curl while testing the restore. A body that would not decode came back
+as Hummingbird's `{"error":{"message":"Coding key `labelIds` not found."}}`, and an
+unmatched path as an empty 404 — neither of them RFC 9457, which ticket 06 makes
+the contract. Everything the routes throw deliberately was already a
+`ProblemError`; the gap was the errors nobody throws on purpose.
+`ProblemMiddleware` translates them, preserving the status and the message.
+
+`malformed-request` is deliberately a **different type from `invalid-request`**:
+one body did not parse, the other parsed and then failed validation, and the two
+call for different fixes. Writing the test for it turned up a related fact worth
+knowing — an invalid project key never reaches validation at all, because the wire
+types refuse it while decoding.
+
 ### Open gaps
 
 - **The Server baseline was lowered deliberately, 98.41% to 97.67%.** The
@@ -631,11 +645,6 @@ paragraphs below the warning. Both paths now go through one `consolidate`.
   `Process` spawning and `FileHandle` sinks, none of which can run in-process. It is
   the same untestable composition `Terminal.standard()` is on the client side. Worth
   knowing that this was a judgement call, not a number that drifted.
-- **A decode failure does not return problem details.** A malformed request body
-  comes back as Hummingbird's `{"error":{"message":"Coding key `labelIds` not
-  found."}}` rather than RFC 9457, which ticket 06 makes the contract for errors.
-  Found by hand-rolling a `PUT` with curl. Everything thrown deliberately is a
-  `ProblemError`; this is the path nobody throws on purpose.
 - **`uninstall` falls back to `NSHomeDirectory()` when `$HOME` is unset**, and that
   branch is deliberately untested — a test that exercised it would delete files from
   the real home directory.

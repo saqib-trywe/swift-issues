@@ -17,6 +17,10 @@ public enum IssuesRouter {
     ) -> Router<AppRequestContext> {
         let router = Router(context: AppRequestContext.self)
 
+        // Outermost, so it also catches what the router itself raises — an unmatched
+        // path, or a body that will not decode — and not only what the handlers do.
+        router.add(middleware: ProblemMiddleware())
+
         router.get("/health") { _, _ in "ok" }
 
         // Login sits outside the authenticated group: it is how a token is
