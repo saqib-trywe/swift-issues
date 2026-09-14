@@ -82,7 +82,7 @@ Requires **Swift 6.3** and **macOS 26** on Apple silicon.
 
 ```sh
 make build      # build everything
-make test       # 1,199 tests, ~3 seconds
+make test       # 1,256 tests, ~4 seconds
 make coverage   # tests plus the per-target coverage gates
 make lint       # swift format, strict
 make build-ios  # the shared app layer, compiled for iOS
@@ -105,6 +105,29 @@ swift run issues-server
 Everything lives under the user's own `~/Library/Application Support/Issues` —
 the install is rootless and runs under a LaunchAgent, not a LaunchDaemon. Without
 the environment variables, first run mints a single-use setup token instead.
+
+### Operating it
+
+```sh
+issues-server backup ~/backups/issues-2026-09-14.sqlite   # safe while serving
+issues-server inspect ~/backups/issues-2026-09-14.sqlite  # what is in it
+issues-server restore ~/backups/issues-2026-09-14.sqlite --force
+issues-server admin reset-password you@example.com        # the way back in
+issues-server config validate
+```
+
+**Back up with `backup`, never with `cp`.** A live database is three files and
+keeps recent commits in the `-wal`, so a copied `issues.sqlite` can be stale or
+corrupt — and looks fine until the day you need it. `backup` uses SQLite's online
+backup to write one consistent file without stopping the server.
+
+**A restore mints a new instance epoch**, so every client full-resyncs on its next
+pull rather than believing a rewound change sequence is current. Queued offline
+changes survive it. The database being replaced is moved aside, not deleted, and
+`restore` refuses outright while the server is running.
+
+An automatic copy is taken immediately before any schema migration, which is the
+only thing on startup that could otherwise destroy data with no way back.
 
 ## Using the CLI
 
@@ -130,9 +153,9 @@ baseline** that does more real work than any absolute number.
 | --- | --- | --- |
 | Core | 99.47% | 90% |
 | ClientStore | 99.59% | 85% |
-| Server | 98.41% | 80% |
-| AppCore | 97.42% | 80% |
-| CLI | 95.28% | 70% |
+| Server | 97.67% | 80% |
+| AppCore | 97.68% | 80% |
+| CLI | 95.33% | 70% |
 | MCP | 90.27% | 70% |
 | Credentials | 45.87% | 40% |
 

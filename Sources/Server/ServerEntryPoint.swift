@@ -80,7 +80,13 @@ public enum ServerEntryPoint {
         let configuration = try ServerConfiguration.load(
             file: configurationURL(applicationSupport: support),
             environment: environment)
-        let database = try AppDatabase.open(at: url)
+        // Auto-migration is the one thing on startup that could destroy data with
+        // no recovery path, so a copy is taken first when there is a migration to
+        // run (ticket 09).
+        let (database, preMigrationBackup) = try Maintenance.openForService(at: url)
+        if let preMigrationBackup {
+            print("Migrating. The database as it was is at \(preMigrationBackup.path)")
+        }
 
         let tokenURL = bootstrapTokenURL(applicationSupport: support)
         if let token = try prepareFirstRun(

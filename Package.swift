@@ -42,6 +42,7 @@ let package = Package(
             name: "Server",
             dependencies: [
                 "Core",
+                .product(name: "ArgumentParser", package: "swift-argument-parser"),
                 .product(name: "Hummingbird", package: "hummingbird"),
                 .product(name: "GRDB", package: "GRDB.swift"),
                 .product(name: "_CryptoExtras", package: "swift-crypto"),

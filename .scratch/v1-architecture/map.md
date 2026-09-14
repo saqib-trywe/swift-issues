@@ -593,8 +593,52 @@ Building it required adding `sessionId` to `Authenticated`, which was not there 
 
 **A trap worth remembering**: the first rate-limit smoke test showed no refusals because `issues-server` was a release binary built *before* the limiter existed. `swift build -c release --product X` does not rebuild the others.
 
+### Operating it — ticket 09's backup, restore and recovery
+
+**1,256 tests.** The last unbuilt scope: `backup`, `inspect`, `restore`,
+`admin reset-password`, `config validate`, `version` and `uninstall`, with
+`serve` as the default subcommand so launchd's plist does not have to name one.
+
+| Decision | Why |
+| --- | --- |
+| **`VACUUM INTO`, never a file copy** — including inside `restore` | A live database is three files and keeps recent commits in the `-wal`. This is the trap ADR 0010 originally fell into, and my own `restore` fell into it too until a test caught it |
+| A restore **moves the old database aside**, with its sidecars, rather than deleting it | "I restored the wrong backup" has to stay recoverable. A rename, not a copy: atomic, free on a large file, and it still works when the thing being set aside is corrupt — which is exactly when a restore is being run |
+| **Validate the source before touching the target** | An unreadable backup must not have cost the operator the database it was going to replace |
+| Restore **refuses while the server is running**, and this is not overridable | Overwriting a file under a live connection is how you corrupt both. `--force` governs replacing data, not ignoring physics |
+| "In use" is asked by **taking the exclusive lock**, not by looking for a `-wal` | The file is wrong in both directions: it survives an unclean shutdown, and it is absent while a connection is merely open. Only `SQLITE_BUSY` counts — any other error would send an operator to stop a service that is already stopped |
+| `reset-password` **ends sessions and clears the lockout** | Matches the HTTP path on sessions. Clearing the lockout matters more: ticket 07 counts failures per account, so a reset that left the lock in place hands back an account the owner still cannot log into — the exact situation the command exists to end |
+| **Uninstall keeps the data** and reports where it is | Deleting somebody's issue tracker as a side effect of removing software is hostile. `--purge` exists for people who mean it |
+
+**Driven end to end against a real server**, which is where the value was. With
+three issues backed up hot while serving and a fourth created afterwards:
+`restore` refused while the server ran; with it stopped, the restore reported the
+new epoch; and a client presenting its pre-restore watermark got
+**409 `stale-epoch` in `application/problem+json`** — silent permanent divergence
+converted into one resync, exactly as tickets 08 and 09 specify. The superseded
+copy still held all four issues. `reset-password` then worked over a pipe: the new
+password logged in, the old one 401'd, and the pre-reset token was dead.
+
+**The bug worth recording**: `restore` originally used `copyItem`. Every test
+passed except one, which restored a database and found **no users in it** — the
+source's rows were still in its `-wal`, so copying the main file alone took a stale
+snapshot. The same failure ADR 0010 was amended to warn about, reintroduced two
+paragraphs below the warning. Both paths now go through one `consolidate`.
+
 ### Open gaps
 
+- **The Server baseline was lowered deliberately, 98.41% to 97.67%.** The
+  uncovered remainder is `ServerContext.standard()`: termios echo suppression,
+  `Process` spawning and `FileHandle` sinks, none of which can run in-process. It is
+  the same untestable composition `Terminal.standard()` is on the client side. Worth
+  knowing that this was a judgement call, not a number that drifted.
+- **A decode failure does not return problem details.** A malformed request body
+  comes back as Hummingbird's `{"error":{"message":"Coding key `labelIds` not
+  found."}}` rather than RFC 9457, which ticket 06 makes the contract for errors.
+  Found by hand-rolling a `PUT` with curl. Everything thrown deliberately is a
+  `ProblemError`; this is the path nobody throws on purpose.
+- **`uninstall` falls back to `NSHomeDirectory()` when `$HOME` is unset**, and that
+  branch is deliberately untested — a test that exercised it would delete files from
+  the real home directory.
 - **Four unreachable defensive lines in Core are uncovered**, which is why the baseline moved from 99.29% to 99.07%: three `default: nil` folds that a per-entity slot can never reach, and the cycle fallback in the topological sort, which this domain cannot produce. The fallback emits the queue head rather than stopping, because silently dropping operations is the one outcome ADR 0004 forbids.
 - **Nothing in the app has been driven by clicking.** Layout is verified by screenshot and behaviour by tests, but no code path that begins with a click — the editor sheet, the comment box, sign-out — has been exercised end to end. UI automation needs Accessibility permission.
 - **The token and sign-out views are unverified visually.** Launching the app needs a Keychain entry, and seeding one from a script prompts for authorisation. Worth a look when the app is next run by hand.
@@ -624,4 +668,9 @@ What remains is not features:
 
 1. **Nothing in the apps has been driven by clicking.** Layout is verified by screenshot and behaviour by tests, but no path beginning with a click has run end to end. UI automation needs Accessibility permission.
 2. **The MCP server has never met a real client.** It is verified against the specification as I read it; pointing Claude Desktop at it is the test that matters.
-3. **Operational shakedown** — ticket 09's backup and restore command, and running the server under a LaunchAgent for a week.
+3. **The server has never run under a LaunchAgent.** The commands that manage one
+   are built and tested, but no plist has been installed and nothing has run for a
+   week unattended — which is where log rotation, unattended restart and crash
+   recovery would actually show themselves.
+4. **The `.pkg` does not exist.** Ticket 09's install story assumes one that stops
+   the agent, replaces the binary and restarts it.
